@@ -17,6 +17,7 @@ func main() {
 	// 1. Parse CLI arguments
 	dbFlag := flag.String("db", "", "Path to SQLite database file")
 	tcpPortFlag := flag.Int("port", 55556, "TCP port to listen on for direct peer messaging")
+	relayFlag := flag.String("relay", "localhost:55558", "Address of the TermTalk relay server")
 	flag.Parse()
 
 	// 2. Resolve database path
@@ -48,6 +49,7 @@ func main() {
 	if profile != nil {
 		// Profile exists, create and start networking services
 		syncMgr = network.NewSyncManager(profile.UUID, profile.Username, *tcpPortFlag, database)
+		syncMgr.SetRelayAddr(*relayFlag)
 		discovery = network.NewPeerDiscovery(profile.UUID, profile.Username, *tcpPortFlag, database)
 
 		if err := syncMgr.Start(); err != nil {
@@ -64,6 +66,7 @@ func main() {
 	} else {
 		// Profile doesn't exist yet (first boot), create skeleton managers that TUI will launch
 		syncMgr = network.NewSyncManager("", "", *tcpPortFlag, database)
+		syncMgr.SetRelayAddr(*relayFlag)
 		discovery = network.NewPeerDiscovery("", "", *tcpPortFlag, database)
 		defer func() {
 			syncMgr.Stop()

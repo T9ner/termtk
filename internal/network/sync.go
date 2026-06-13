@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"sync"
 	"time"
@@ -13,11 +14,20 @@ import (
 
 // Frame represents a protocol packet exchanged over TCP.
 type Frame struct {
-	Type     string      `json:"type"`                // "handshake", "sync_list", "sync_request", "msg"
-	UUID     string      `json:"uuid,omitempty"`      // Sender UUID for handshakes
-	Username string      `json:"username,omitempty"`  // Sender Username for handshakes
-	Hashes   []string    `json:"hashes,omitempty"`    // List of message IDs for history sync
-	Message  *db.Message `json:"message,omitempty"`   // Single message object
+	Type     string      `json:"type"`               // "handshake", "sync_list", "sync_request", "msg"
+	UUID     string      `json:"uuid,omitempty"`     // Sender UUID for handshakes
+	Username string      `json:"username,omitempty"` // Sender Username for handshakes
+	Hashes   []string    `json:"hashes,omitempty"`   // List of message IDs for history sync
+	Message  *db.Message `json:"message,omitempty"`  // Single message object
+}
+
+// RelayFrame represents the message wrapper used by the relay server.
+type RelayFrame struct {
+	Type      string          `json:"type"`               // "register", "relay", "msg", "offline", "ping"
+	UUID      string          `json:"uuid,omitempty"`     // Client registration UUID
+	Username  string          `json:"username,omitempty"` // Client registration Username
+	Recipient string          `json:"recipient,omitempty"` // Target Recipient UUID
+	Message   json.RawMessage `json:"message,omitempty"`  // Nested Frame payload
 }
 
 // PeerConnection wraps an active TCP connection to a peer.
@@ -64,6 +74,14 @@ type SyncManager struct {
 	wg         sync.WaitGroup
 	OnMsgRecv  func(msg *db.Message)
 	OnPeerSync func(peerUUID string)
+
+	// Relay connection state
+	relayAddr   string
+	relayConn   net.Conn
+	relayEnc    *json.Encoder
+	relayDec    *json.Decoder
+	relayOnline bool
+	relayMu     sync.Mutex
 }
 
 // NewSyncManager creates a SyncManager instance.
@@ -73,9 +91,17 @@ func NewSyncManager(localUUID, username string, tcpPort int, database *db.Databa
 		username:   username,
 		db:         database,
 		tcpPort:    tcpPort,
+		relayAddr:  "localhost:55558", // Default fallback
 		activeConn: make(map[string]*PeerConnection),
 		stopChan:   make(chan struct{}),
 	}
+}
+
+// SetRelayAddr sets the relay server address dynamically.
+func (sm *SyncManager) SetRelayAddr(addr string) {
+	sm.relayMu.Lock()
+	defer sm.relayMu.Unlock()
+	sm.relayAddr = addr
 }
 
 // UpdateCredentials updates the profile credentials thread-safely after registration.
@@ -86,19 +112,22 @@ func (sm *SyncManager) UpdateCredentials(uuid, username string) {
 	sm.username = username
 }
 
-// Start starts the TCP server listening for incoming connections.
+// Start starts the TCP server listening for incoming connections and the relay connection loop.
 func (sm *SyncManager) Start() error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
 	l, err := net.Listen("tcp4", fmt.Sprintf("0.0.0.0:%d", sm.tcpPort))
-	if err != nil {
-		return fmt.Errorf("failed to start TCP listener on port %d: %w", sm.tcpPort, err)
+	if err == nil {
+		sm.listener = l
+		sm.wg.Add(1)
+		go sm.acceptLoop()
+	} else {
+		log.Printf("Warning: local TCP listener could not start (port occupied?): %v", err)
 	}
-	sm.listener = l
 
 	sm.wg.Add(1)
-	go sm.acceptLoop()
+	go sm.relayLoop()
 
 	return nil
 }
@@ -115,6 +144,12 @@ func (sm *SyncManager) Stop() {
 		pc.Close()
 	}
 	sm.mu.Unlock()
+
+	sm.relayMu.Lock()
+	if sm.relayConn != nil {
+		sm.relayConn.Close()
+	}
+	sm.relayMu.Unlock()
 
 	sm.wg.Wait()
 }
@@ -169,7 +204,7 @@ func (sm *SyncManager) ConnectToPeer(c *db.Contact) error {
 	return nil
 }
 
-// SendMessage sends a message to a peer. If peer is online, it transmits over TCP immediately.
+// SendMessage sends a message to a peer. If peer is online locally, it transmits via TCP. Otherwise, it fallbacks to the relay server.
 func (sm *SyncManager) SendMessage(peerUUID string, content string) error {
 	msg := &db.Message{
 		Sender:    sm.localUUID,
@@ -180,16 +215,16 @@ func (sm *SyncManager) SendMessage(peerUUID string, content string) error {
 	}
 	msg.ID = msg.GenerateID()
 
-	// Save to DB as queued
+	// Save to DB as queued (outbox)
 	if err := sm.db.SaveMessage(msg); err != nil {
 		return err
 	}
 
 	sm.mu.Lock()
-	pc, online := sm.activeConn[peerUUID]
+	pc, localOnline := sm.activeConn[peerUUID]
 	sm.mu.Unlock()
 
-	if online {
+	if localOnline {
 		go func() {
 			err := pc.Send(Frame{
 				Type:    "msg",
@@ -199,6 +234,20 @@ func (sm *SyncManager) SendMessage(peerUUID string, content string) error {
 				// Mark as synced locally
 				_ = sm.db.UpdateMessageStatus(msg.ID, "synced")
 				msg.Status = "synced"
+				if sm.OnMsgRecv != nil {
+					sm.OnMsgRecv(msg)
+				}
+			}
+		}()
+	} else {
+		// Attempt routing through the relay server
+		go func() {
+			err := sm.sendRelayFrame(peerUUID, Frame{
+				Type:    "msg",
+				Message: msg,
+			})
+			if err == nil {
+				// Note: message remains queued until recipient client returns delivery ACK
 				if sm.OnMsgRecv != nil {
 					sm.OnMsgRecv(msg)
 				}
@@ -228,7 +277,30 @@ func (sm *SyncManager) SyncHistory(pc *PeerConnection) {
 	})
 }
 
-// acceptLoop accepts incoming TCP connections.
+// sendRelayFrame encapsulates and sends a Frame to the relay server.
+func (sm *SyncManager) sendRelayFrame(recipientUUID string, f Frame) error {
+	sm.relayMu.Lock()
+	enc := sm.relayEnc
+	online := sm.relayOnline
+	sm.relayMu.Unlock()
+
+	if !online || enc == nil {
+		return fmt.Errorf("relay offline")
+	}
+
+	payload, err := json.Marshal(f)
+	if err != nil {
+		return err
+	}
+
+	return enc.Encode(RelayFrame{
+		Type:      "relay",
+		Recipient: recipientUUID,
+		Message:   payload,
+	})
+}
+
+// acceptLoop accepts incoming local TCP connections.
 func (sm *SyncManager) acceptLoop() {
 	defer sm.wg.Done()
 
@@ -274,7 +346,6 @@ func (sm *SyncManager) handleIncomingHandshake(conn net.Conn) {
 
 	// Track connection
 	sm.mu.Lock()
-	// Close any existing connection to this peer first
 	if oldPc, exists := sm.activeConn[pc.UUID]; exists {
 		oldPc.Close()
 	}
@@ -288,7 +359,7 @@ func (sm *SyncManager) handleIncomingHandshake(conn net.Conn) {
 	go sm.SyncHistory(pc)
 }
 
-// handleConnection handles reading frames from a peer.
+// handleConnection handles reading frames from a direct peer.
 func (sm *SyncManager) handleConnection(pc *PeerConnection) {
 	defer sm.wg.Done()
 	defer func() {
@@ -303,25 +374,25 @@ func (sm *SyncManager) handleConnection(pc *PeerConnection) {
 		err := pc.dec.Decode(&frame)
 		if err != nil {
 			if err == io.EOF {
-				return // Graceful close
+				return
 			}
-			return // Connection error
+			return
 		}
 
 		switch frame.Type {
 		case "sync_list":
-			sm.handleSyncList(pc, frame.Hashes)
+			sm.handleSyncList(pc.UUID, frame.Hashes, func(f Frame) { _ = pc.Send(f) })
 		case "sync_request":
-			sm.handleSyncRequest(pc, frame.Hashes)
+			sm.handleSyncRequest(pc.UUID, frame.Hashes, func(f Frame) { _ = pc.Send(f) })
 		case "msg":
-			sm.handleIncomingMessage(pc, frame.Message)
+			sm.handleIncomingMessage(pc.UUID, frame.Message)
 		}
 	}
 }
 
-func (sm *SyncManager) handleSyncList(pc *PeerConnection, peerHashes []string) {
-	// 1. Check which of the peer's hashes we don't have
-	history, err := sm.db.GetChatHistory(sm.localUUID, pc.UUID)
+// handleSyncList processes the message log comparison.
+func (sm *SyncManager) handleSyncList(peerUUID string, peerHashes []string, sendFunc func(Frame)) {
+	history, err := sm.db.GetChatHistory(sm.localUUID, peerUUID)
 	if err != nil {
 		return
 	}
@@ -338,24 +409,23 @@ func (sm *SyncManager) handleSyncList(pc *PeerConnection, peerHashes []string) {
 		}
 	}
 
-	// 2. Request the messages we don't have
+	// Request messages we don't have
 	if len(missingFromUs) > 0 {
-		_ = pc.Send(Frame{
+		sendFunc(Frame{
 			Type:   "sync_request",
 			Hashes: missingFromUs,
 		})
 	}
 
-	// 3. Send the messages we have that the peer doesn't
+	// Send messages we have that the peer doesn't
 	peerHashesMap := make(map[string]bool)
 	for _, h := range peerHashes {
 		peerHashesMap[h] = true
 	}
 
 	for _, m := range history {
-		if !peerHashesMap[m.ID] {
-			// Peer is missing this message. Send it.
-			_ = pc.Send(Frame{
+		if !peerHashesMap[m.ID] && m.Status == "synced" {
+			sendFunc(Frame{
 				Type:    "msg",
 				Message: &m,
 			})
@@ -363,16 +433,17 @@ func (sm *SyncManager) handleSyncList(pc *PeerConnection, peerHashes []string) {
 	}
 }
 
-func (sm *SyncManager) handleSyncRequest(pc *PeerConnection, requestedHashes []string) {
+// handleSyncRequest processes requests for missing messages.
+func (sm *SyncManager) handleSyncRequest(peerUUID string, requestedHashes []string, sendFunc func(Frame)) {
+	history, err := sm.db.GetChatHistory(sm.localUUID, peerUUID)
+	if err != nil {
+		return
+	}
+
 	for _, id := range requestedHashes {
-		// Fetch from db and send
-		rows, err := sm.db.GetChatHistory(sm.localUUID, pc.UUID)
-		if err != nil {
-			continue
-		}
-		for _, m := range rows {
+		for _, m := range history {
 			if m.ID == id {
-				_ = pc.Send(Frame{
+				sendFunc(Frame{
 					Type:    "msg",
 					Message: &m,
 				})
@@ -382,38 +453,214 @@ func (sm *SyncManager) handleSyncRequest(pc *PeerConnection, requestedHashes []s
 	}
 }
 
-func (sm *SyncManager) handleIncomingMessage(pc *PeerConnection, m *db.Message) {
+// handleIncomingMessage processes incoming messages. If it's a delivery ACK, it completes the sync.
+func (sm *SyncManager) handleIncomingMessage(peerUUID string, m *db.Message) {
 	if m == nil {
 		return
 	}
 
-	// Verify message hash matches content to ensure integrity
-	if m.GenerateID() != m.ID {
-		return // Hash mismatch, reject
+	// If it is a delivery ACK, complete the message status sync
+	if m.Status == "ack" {
+		_ = sm.db.UpdateMessageStatus(m.Content, "synced")
+		m.Status = "synced"
+		if sm.OnMsgRecv != nil {
+			sm.OnMsgRecv(m)
+		}
+		return
 	}
 
-	// Force status to synced since it is successfully received
-	m.Status = "synced"
+	// Validate message integrity
+	if m.GenerateID() != m.ID {
+		return
+	}
 
-	// Save to DB
+	m.Status = "synced"
 	if err := sm.db.SaveMessage(m); err != nil {
 		return
 	}
 
-	// Send confirmation back if this was a new, direct message sent to us (not from history sync)
-	// We can check if it's sent to us and we haven't already marked it as synced
-	if m.Recipient == sm.localUUID && m.Sender == pc.UUID {
-		// Trigger UI callback
+	if m.Recipient == sm.localUUID && m.Sender == peerUUID {
 		if sm.OnMsgRecv != nil {
 			sm.OnMsgRecv(m)
+		}
+
+		// Send delivery confirmation ACK back
+		ackMsg := &db.Message{
+			Sender:    sm.localUUID,
+			Recipient: peerUUID,
+			Content:   m.ID,
+			Timestamp: time.Now(),
+			Status:    "ack",
+		}
+		ackMsg.ID = ackMsg.GenerateID()
+
+		sm.mu.Lock()
+		pc, localOnline := sm.activeConn[peerUUID]
+		sm.mu.Unlock()
+
+		if localOnline {
+			_ = pc.Send(Frame{
+				Type:    "msg",
+				Message: ackMsg,
+			})
+		} else {
+			_ = sm.sendRelayFrame(peerUUID, Frame{
+				Type:    "msg",
+				Message: ackMsg,
+			})
 		}
 	}
 }
 
-// IsPeerOnline checks if a peer is connected.
+// relayLoop connects to and processes incoming frames from the relay server.
+func (sm *SyncManager) relayLoop() {
+	defer sm.wg.Done()
+
+	for {
+		select {
+		case <-sm.stopChan:
+			return
+		default:
+			sm.relayMu.Lock()
+			localUUID := sm.localUUID
+			username := sm.username
+			addr := sm.relayAddr
+			sm.relayMu.Unlock()
+
+			if localUUID == "" {
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			conn, err := net.Dial("tcp", addr)
+			if err != nil {
+				time.Sleep(5 * time.Second)
+				continue
+			}
+
+			enc := json.NewEncoder(conn)
+			dec := json.NewDecoder(conn)
+
+			// Send registration
+			reg := RelayFrame{
+				Type:     "register",
+				UUID:     localUUID,
+				Username: username,
+			}
+			if err := enc.Encode(reg); err != nil {
+				conn.Close()
+				time.Sleep(2 * time.Second)
+				continue
+			}
+
+			var ack RelayFrame
+			if err := dec.Decode(&ack); err != nil || ack.Type != "registered" {
+				conn.Close()
+				time.Sleep(2 * time.Second)
+				continue
+			}
+
+			sm.relayMu.Lock()
+			sm.relayConn = conn
+			sm.relayEnc = enc
+			sm.relayDec = dec
+			sm.relayOnline = true
+			sm.relayMu.Unlock()
+
+			log.Printf("Successfully registered on TermTalk Relay: %s", addr)
+
+			// Trigger automatic history synchronization for all known contacts
+			go sm.triggerRelaySyncAll()
+
+			errChan := make(chan error, 1)
+			go func() {
+				for {
+					var frame RelayFrame
+					if err := dec.Decode(&frame); err != nil {
+						errChan <- err
+						return
+					}
+
+					if frame.Type == "msg" {
+						var inner Frame
+						if err := json.Unmarshal(frame.Message, &inner); err == nil {
+							sm.handleRelayFrame(frame.UUID, inner)
+						}
+					}
+				}
+			}()
+
+			select {
+			case <-sm.stopChan:
+				conn.Close()
+				return
+			case <-errChan:
+				conn.Close()
+				sm.relayMu.Lock()
+				sm.relayConn = nil
+				sm.relayEnc = nil
+				sm.relayDec = nil
+				sm.relayOnline = false
+				sm.relayMu.Unlock()
+				time.Sleep(2 * time.Second)
+			}
+		}
+	}
+}
+
+// handleRelayFrame routes received relay frames to the respective protocol handler.
+func (sm *SyncManager) handleRelayFrame(senderUUID string, inner Frame) {
+	sendFunc := func(f Frame) {
+		_ = sm.sendRelayFrame(senderUUID, f)
+	}
+
+	switch inner.Type {
+	case "sync_list":
+		sm.handleSyncList(senderUUID, inner.Hashes, sendFunc)
+	case "sync_request":
+		sm.handleSyncRequest(senderUUID, inner.Hashes, sendFunc)
+	case "msg":
+		sm.handleIncomingMessage(senderUUID, inner.Message)
+	}
+}
+
+// triggerRelaySyncAll triggers background sync request frames for all stored contacts.
+func (sm *SyncManager) triggerRelaySyncAll() {
+	time.Sleep(1 * time.Second) // Let registration settle
+	contacts, err := sm.db.ListContacts()
+	if err != nil {
+		return
+	}
+
+	for _, c := range contacts {
+		history, err := sm.db.GetChatHistory(sm.localUUID, c.UUID)
+		if err != nil {
+			continue
+		}
+
+		hashes := make([]string, len(history))
+		for i, m := range history {
+			hashes[i] = m.ID
+		}
+
+		_ = sm.sendRelayFrame(c.UUID, Frame{
+			Type:   "sync_list",
+			Hashes: hashes,
+		})
+	}
+}
+
+// IsPeerOnline checks if a peer is connected directly.
 func (sm *SyncManager) IsPeerOnline(peerUUID string) bool {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	_, online := sm.activeConn[peerUUID]
 	return online
+}
+
+// IsRelayOnline checks if the client is connected to the relay server.
+func (sm *SyncManager) IsRelayOnline() bool {
+	sm.relayMu.Lock()
+	defer sm.relayMu.Unlock()
+	return sm.relayOnline
 }
