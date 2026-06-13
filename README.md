@@ -1,107 +1,55 @@
-# 💬 TermTalk
+# TermTalk 💬
 
-An offline-first, peer-to-peer (P2P) terminal messaging application built in Go.
+An offline-first, decentralized, peer-to-peer terminal-based messaging application written in Go.
 
-Whether you're connected to the internet, on a local Wi-Fi network with no internet access, or completely disconnected, **TermTalk** keeps you in touch with your friends. It compiles into a single, zero-dependency native binary for both **Windows** and **macOS** with no runtime requirements.
-
----
-
-## ✨ Features
-
-*   **⚡ P2P Local Discovery**: Periodically broadcasts presence over UDP. Peers on the same local network auto-detect each other's IP addresses and ports with zero configuration.
-*   **🔄 TCP Sync Protocol**: Directly establishes TCP channels to exchange message logs. If you've been offline, TermTalk automatically swaps message histories to reconcile missing conversations.
-*   **💾 Pure Go SQLite**: Persistence uses `github.com/ncruces/go-sqlite3`, a WebAssembly-compiled SQLite driver. It operates with **zero CGO requirements**, making cross-compilation painless.
-*   **📦 Sneakernet Offline Sync**: Completely offline? Compose messages and queue them in your local database. Export them to a `.json` sync file, transfer it via a USB drive (or SD card), and import it on your friend's computer.
-*   **🎨 Bubble Tea TUI**: A terminal user interface designed using [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lipgloss](https://github.com/charmbracelet/lipgloss) from Charm.sh.
+TermTalk is designed for local network instant messaging and asynchronous message synchronization. It runs entirely without a centralized server, utilizing peer discovery and peer-to-peer synchronization protocols to keep your conversations up to date.
 
 ---
 
-## 🚀 Getting Started
+## Features
+
+- **Decentralized P2P Messaging**: Communicate directly with other active peers without intermediaries.
+- **Automated Peer Discovery**: Auto-detect online contacts on the same local Wi-Fi network using UDP broadcast.
+- **State Synchronization (TCP Sync)**: Dynamically exchange message history logs, request missing messages, and maintain open connections for real-time chat.
+- **Sneakernet Sync**: Export and import JSON sync files to share messages across disconnected nodes via USB drives or physical media.
+- **Bubble Tea Terminal UI**: A sleek, keyboard-driven terminal dashboard built using the Bubble Tea framework.
+- **CGO-Free Persistence**: Leverages a pure Go SQLite engine for hassle-free cross-compiling on Windows, macOS, and Linux.
+
+---
+
+## Architecture & Domain Model
+
+- **Peer**: An active TermTalk instance, identified by a unique UUID and username.
+- **Contact**: A registered peer saved in the local database.
+- **Discovery Daemon**: Broadcasts node credentials and listens on UDP port `55555` to automatically construct the contact registry.
+- **TCP Sync Protocol**: Negotiates history by exchanging message hashes (SHA-256) upon connection, requests missing messages, and streams instant messaging.
+- **Outbox Queue**: Queues unsent messages locally until the recipient peer comes online.
+
+---
+
+## Build & Run
 
 ### Prerequisites
-*   [Go](https://go.dev/) 1.22+ (only required if building from source)
+- Go `1.26+`
 
-### Installation & Build
+### Quick Start
 
-1.  Clone the repository:
-    ```bash
-    git clone https://github.com/yourusername/termtalk.git
-    cd termtalk
-    ```
-2.  Compile the binary:
-    *   **Windows**:
-        ```bash
-        go build -o termtalk.exe ./cmd/termtalk/main.go
-        ```
-    *   **macOS / Linux**:
-        ```bash
-        go build -o termtalk ./cmd/termtalk/main.go
-        ```
+1. **Run Application**:
+   ```bash
+   go run cmd/termtalk/main.go
+   ```
 
-### Cross-Compiling
-Because TermTalk uses a pure-Go SQLite driver, you can cross-compile without a C cross-compiler:
-*   Compile for macOS (Apple Silicon) from Windows:
-    ```bash
-    $env:GOOS="darwin"; $env:GOARCH="arm64"; go build -o termtalk ./cmd/termtalk/main.go
-    ```
-*   Compile for Windows from macOS/Linux:
-    ```bash
-    GOOS=windows GOARCH=amd64 go build -o termtalk.exe ./cmd/termtalk/main.go
-    ```
+2. **Run Tests**:
+   ```bash
+   go test ./...
+   ```
 
----
+3. **Format Code**:
+   ```bash
+   go fmt ./...
+   ```
 
-## 📖 How to Use
-
-### Running Local Peers (Testing Setup)
-To simulate two users chatting on the same computer:
-
-1.  **Start Alice** on port `55556`:
-    ```bash
-    ./termtalk -db alice.db -port 55556
-    ```
-2.  **Start Bob** on port `55557`:
-    ```bash
-    ./termtalk -db bob.db -port 55557
-    ```
-3.  Choose usernames and complete the registration.
-4.  Once registered, the instances will automatically discover each other over UDP broadcast and establish a direct connection.
-
-### ⌨️ TUI Keyboard Shortcuts
-
-| Shortcut | Action |
-|---|---|
-| `Up / Down` | Select contact from the sidebar |
-| `Ctrl + N` | Add contact manually by pasting `username:uuid` |
-| `Ctrl + E` | Export pending offline messages to a sync file (Sneakernet) |
-| `Ctrl + I` | Import a sync file from a USB drive/file |
-| `Ctrl + Q` | Quit application |
-
----
-
-## 🏗️ Architecture
-
-```text
-termtalk/
-├── cmd/
-│   └── termtalk/
-│       └── main.go         # App entry point
-├── internal/
-│   ├── db/
-│   │   ├── db.go           # SQLite schema migrations & operations
-│   │   ├── models.go       # Structs for Profiles, Contacts, Messages
-│   │   └── sneakernet.go   # JSON sync file export/import
-│   ├── network/
-│   │   ├── discovery.go    # UDP broadcast peer discovery
-│   │   └── sync.go         # TCP direct sync & message server
-│   └── ui/
-│       ├── model.go        # Bubble Tea main model
-│       ├── update.go       # Event handling loop
-│       └── view.go         # Lipgloss layouts & view rendering
-```
-
----
-
-## 📜 License
-
-Distributed under the MIT License. See `LICENSE` for more information.
+4. **Lint Code**:
+   ```bash
+   go vet ./...
+   ```
