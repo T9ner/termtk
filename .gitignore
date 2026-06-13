@@ -26,3 +26,9 @@ go.work.sum
 *.njsproj
 *.sln
 *.sw?
+
+# Agent and Skill configurations (DOX)
+.agents/
+skills-lock.json
+AGENTS.md
+**/AGENTS.md
