@@ -1,7 +1,8 @@
 # TermTalk (termtk) Developer Guide
 
 ## Build and Run Commands
-- Run application: `go run cmd/termtalk/main.go`
+- Run client application: `go run cmd/termtalk/main.go`
+- Run relay server: `go run cmd/termtalk-relay/main.go`
 - Run tests: `go test ./...`
 - Format code: `go fmt ./...`
 - Lint code: `go vet ./...`

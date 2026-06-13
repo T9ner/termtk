@@ -1,0 +1,178 @@
+package network
+
+import (
+	"encoding/json"
+	"net"
+	"sync"
+	"testing"
+	"time"
+
+	"termtalk/internal/db"
+)
+
+// MockRelayServer represents an in-memory relay server for integration tests.
+type MockRelayServer struct {
+	listener net.Listener
+	clients  map[string]net.Conn
+	mu       sync.Mutex
+	stopChan chan struct{}
+	wg       sync.WaitGroup
+}
+
+// StartMockRelay boots a mock relay server listening on the specified address.
+func StartMockRelay(t *testing.T, addr string) *MockRelayServer {
+	l, err := net.Listen("tcp", addr)
+	if err != nil {
+		t.Fatalf("failed to start mock relay: %v", err)
+	}
+
+	mr := &MockRelayServer{
+		listener: l,
+		clients:  make(map[string]net.Conn),
+		stopChan: make(chan struct{}),
+	}
+
+	mr.wg.Add(1)
+	go mr.acceptLoop()
+
+	return mr
+}
+
+// Stop stops the mock relay server.
+func (mr *MockRelayServer) Stop() {
+	close(mr.stopChan)
+	mr.listener.Close()
+	mr.mu.Lock()
+	for _, c := range mr.clients {
+		c.Close()
+	}
+	mr.mu.Unlock()
+	mr.wg.Wait()
+}
+
+func (mr *MockRelayServer) acceptLoop() {
+	defer mr.wg.Done()
+	for {
+		conn, err := mr.listener.Accept()
+		if err != nil {
+			return
+		}
+		go mr.handleClient(conn)
+	}
+}
+
+func (mr *MockRelayServer) handleClient(conn net.Conn) {
+	dec := json.NewDecoder(conn)
+	enc := json.NewEncoder(conn)
+	var clientUUID string
+
+	defer func() {
+		conn.Close()
+		if clientUUID != "" {
+			mr.mu.Lock()
+			delete(mr.clients, clientUUID)
+			mr.mu.Unlock()
+		}
+	}()
+
+	for {
+		var frame RelayFrame
+		if err := dec.Decode(&frame); err != nil {
+			return
+		}
+
+		switch frame.Type {
+		case "register":
+			clientUUID = frame.UUID
+			mr.mu.Lock()
+			mr.clients[clientUUID] = conn
+			mr.mu.Unlock()
+			_ = enc.Encode(RelayFrame{Type: "registered"})
+
+		case "relay":
+			mr.mu.Lock()
+			targetConn, online := mr.clients[frame.Recipient]
+			mr.mu.Unlock()
+
+			if online {
+				targetEnc := json.NewEncoder(targetConn)
+				_ = targetEnc.Encode(RelayFrame{
+					Type:    "msg",
+					UUID:    clientUUID,
+					Message: frame.Message,
+				})
+			} else {
+				_ = enc.Encode(RelayFrame{Type: "offline", Recipient: frame.Recipient})
+			}
+		}
+	}
+}
+
+func TestSyncManagerViaRelay(t *testing.T) {
+	relayAddr := "127.0.0.1:55569"
+	mr := StartMockRelay(t, relayAddr)
+	defer mr.Stop()
+
+	// 1. Create DB and SyncManager for Alice
+	aliceDB, aliceCleanup := createTempDB(t, "alice_relay")
+	defer aliceCleanup()
+
+	aliceProfile := &db.Profile{UUID: "alice-uuid", Username: "alice"}
+	_ = aliceDB.SaveProfile(aliceProfile)
+
+	aliceSync := NewSyncManager(aliceProfile.UUID, aliceProfile.Username, 55563, aliceDB)
+	aliceSync.SetRelayAddr(relayAddr)
+	_ = aliceSync.Start()
+	defer aliceSync.Stop()
+
+	// 2. Create DB and SyncManager for Bob
+	bobDB, bobCleanup := createTempDB(t, "bob_relay")
+	defer bobCleanup()
+
+	bobProfile := &db.Profile{UUID: "bob-uuid", Username: "bob"}
+	_ = bobDB.SaveProfile(bobProfile)
+
+	bobSync := NewSyncManager(bobProfile.UUID, bobProfile.Username, 55564, bobDB)
+	bobSync.SetRelayAddr(relayAddr)
+	_ = bobSync.Start()
+	defer bobSync.Stop()
+
+	// Register Bob in Alice's contact list (as offline/relay target)
+	_ = aliceDB.UpsertContact(&db.Contact{
+		UUID:     bobProfile.UUID,
+		Username: bobProfile.Username,
+		IP:       "offline",
+		Port:     0,
+		LastSeen: time.Now(),
+	})
+
+	// Wait for registration on relay
+	time.Sleep(200 * time.Millisecond)
+
+	// Bind Bob callback to wait for relayed message
+	messageReceived := make(chan *db.Message, 1)
+	bobSync.OnMsgRecv = func(msg *db.Message) {
+		if msg.Status == "synced" {
+			messageReceived <- msg
+		}
+	}
+
+	// 3. Send Message from Alice to Bob (routes through relay)
+	err := aliceSync.SendMessage(bobProfile.UUID, "Hello via relay Bob!")
+	if err != nil {
+		t.Fatalf("failed to send message: %v", err)
+	}
+
+	// Verify Bob received it
+	select {
+	case msg := <-messageReceived:
+		if msg.Content != "Hello via relay Bob!" {
+			t.Errorf("expected content 'Hello via relay Bob!', got '%s'", msg.Content)
+		}
+		if msg.Sender != aliceProfile.UUID {
+			t.Errorf("expected sender '%s', got '%s'", aliceProfile.UUID, msg.Sender)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("bob timed out waiting for relayed message")
+	}
+}
