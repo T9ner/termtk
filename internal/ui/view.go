@@ -115,7 +115,7 @@ func (m Model) viewDashboard() string {
 		sidebarBuilder.WriteString(lipgloss.NewStyle().Foreground(grayColor).Render("No contacts yet.\nUse Ctrl+N to add."))
 	} else {
 		for i, c := range m.Contacts {
-			online := m.SyncManager != nil && m.SyncManager.IsPeerOnline(c.UUID)
+			online := m.Client != nil && m.Client.IsPeerOnline(c.UUID)
 			badge := offlineBadge.Render("[OFF]")
 			if online {
 				badge = onlineBadge.Render("[ON ]")
@@ -141,7 +141,7 @@ func (m Model) viewDashboard() string {
 	if m.SelectedIdx >= 0 && m.SelectedIdx < len(m.Contacts) {
 		contact := m.Contacts[m.SelectedIdx]
 		onlineStatus := offlineBadge.Render("offline")
-		if m.SyncManager.IsPeerOnline(contact.UUID) {
+		if m.Client.IsPeerOnline(contact.UUID) {
 			onlineStatus = onlineBadge.Render("online")
 		}
 		chatBuilder.WriteString(headerStyle.Render(fmt.Sprintf("Chatting with %s (%s)", contact.Username, onlineStatus)) + "\n\n")
