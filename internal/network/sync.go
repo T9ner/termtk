@@ -84,6 +84,9 @@ type SyncManager struct {
 	relayMu     sync.Mutex
 }
 
+// DefaultRelayAddr is the public TermTalk relay node hosted on Fly.io
+const DefaultRelayAddr = "termtalk-relay.fly.dev:55558"
+
 // NewSyncManager creates a SyncManager instance.
 func NewSyncManager(localUUID, username string, tcpPort int, database *db.Database) *SyncManager {
 	return &SyncManager{
@@ -91,7 +94,7 @@ func NewSyncManager(localUUID, username string, tcpPort int, database *db.Databa
 		username:   username,
 		db:         database,
 		tcpPort:    tcpPort,
-		relayAddr:  "localhost:55558", // Default fallback
+		relayAddr:  DefaultRelayAddr,
 		activeConn: make(map[string]*PeerConnection),
 		stopChan:   make(chan struct{}),
 	}

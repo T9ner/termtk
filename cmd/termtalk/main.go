@@ -8,8 +8,7 @@ import (
 	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"termtalk/internal/db"
-	"termtalk/internal/network"
+	"termtalk/internal/client"
 	"termtalk/internal/ui"
 )
 
@@ -17,7 +16,7 @@ func main() {
 	// 1. Parse CLI arguments
 	dbFlag := flag.String("db", "", "Path to SQLite database file")
 	tcpPortFlag := flag.Int("port", 55556, "TCP port to listen on for direct peer messaging")
-	relayFlag := flag.String("relay", "localhost:55558", "Address of the TermTalk relay server")
+	relayFlag := flag.String("relay", "termtalk-relay.fly.dev:55558", "Address of the TermTalk relay server")
 	flag.Parse()
 
 	// 2. Resolve database path
@@ -27,64 +26,31 @@ func main() {
 		dbPath = filepath.Join(".", "termtalk.db")
 	}
 
-	// 3. Initialize SQLite Database
-	database, err := db.NewDatabase(dbPath)
+	// 3. Initialize Client Core
+	c, err := client.New(dbPath, *tcpPortFlag)
 	if err != nil {
-		log.Fatalf("Fatal: failed to initialize database: %v", err)
+		log.Fatalf("Fatal: failed to initialize client: %v", err)
 	}
-	defer database.Close()
+	defer c.Stop()
+
+	// Set relay address
+	c.SetRelayAddr(*relayFlag)
 
 	// 4. Retrieve Profile (if registered)
-	profile, err := database.GetProfile()
+	profile, err := c.LoadProfile()
 	if err != nil {
 		log.Fatalf("Fatal: database read error: %v", err)
 	}
 
-	// 5. Initialize background channels and managers
-	eventChan := make(chan ui.MsgEvent, 100)
-
-	var discovery *network.PeerDiscovery
-	var syncMgr *network.SyncManager
-
 	if profile != nil {
-		// Profile exists, create and start networking services
-		syncMgr = network.NewSyncManager(profile.UUID, profile.Username, *tcpPortFlag, database)
-		syncMgr.SetRelayAddr(*relayFlag)
-		discovery = network.NewPeerDiscovery(profile.UUID, profile.Username, *tcpPortFlag, database)
-
-		if err := syncMgr.Start(); err != nil {
-			log.Printf("Warning: failed to start TCP Sync Server: %v", err)
-		} else {
-			defer syncMgr.Stop()
+		// Start networking if profile exists
+		if err := c.Start(); err != nil {
+			log.Printf("Warning: failed to start client networking: %v", err)
 		}
-
-		if err := discovery.Start(); err != nil {
-			log.Printf("Warning: failed to start UDP Discovery: %v", err)
-		} else {
-			defer discovery.Stop()
-		}
-	} else {
-		// Profile doesn't exist yet (first boot), create skeleton managers that TUI will launch
-		syncMgr = network.NewSyncManager("", "", *tcpPortFlag, database)
-		syncMgr.SetRelayAddr(*relayFlag)
-		discovery = network.NewPeerDiscovery("", "", *tcpPortFlag, database)
-		defer func() {
-			syncMgr.Stop()
-			discovery.Stop()
-		}()
 	}
 
-	// Bind callbacks to relay networking events into the TUI event loop
-	discovery.OnPeerFound = func(contact *db.Contact) {
-		eventChan <- ui.PeerDiscoveredMsg{Contact: contact}
-	}
-
-	syncMgr.OnMsgRecv = func(msg *db.Message) {
-		eventChan <- ui.MessageReceivedMsg{Message: msg}
-	}
-
-	// 6. Run the Bubble Tea UI Loop
-	model := ui.NewModel(database, discovery, syncMgr, eventChan)
+	// 5. Run the Bubble Tea UI Loop
+	model := ui.NewModel(c)
 	if profile != nil {
 		model.LocalUser = profile
 		model.State = ui.StateDashboard

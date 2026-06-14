@@ -3,8 +3,8 @@ package ui
 import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
+	"termtalk/internal/client"
 	"termtalk/internal/db"
-	"termtalk/internal/network"
 )
 
 type AppState int
@@ -19,12 +19,9 @@ const (
 
 // Model represents the state of the TermTalk TUI application.
 type Model struct {
-	State       AppState
-	DB          *db.Database
-	Discovery   *network.PeerDiscovery
-	SyncManager *network.SyncManager
-	LocalUser   *db.Profile
-	EventChan   chan MsgEvent
+	State     AppState
+	Client    *client.Client
+	LocalUser *db.Profile
 
 	// UI Component states
 	UsernameInput   textinput.Model // For profile creation
@@ -43,13 +40,10 @@ type Model struct {
 	StatusExpiry   int64 // Unix time for when status should clear
 }
 
-// NewModel initializes the Bubble Tea model with database and network references.
-func NewModel(database *db.Database, discovery *network.PeerDiscovery, syncMgr *network.SyncManager, eventChan chan MsgEvent) *Model {
+// NewModel initializes the Bubble Tea model with the Client reference.
+func NewModel(c *client.Client) *Model {
 	m := &Model{
-		DB:          database,
-		Discovery:   discovery,
-		SyncManager: syncMgr,
-		EventChan:   eventChan,
+		Client:      c,
 		SelectedIdx: -1,
 	}
 
