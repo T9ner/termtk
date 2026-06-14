@@ -27,6 +27,46 @@ TermTalk is designed for local network instant messaging and asynchronous messag
 
 ---
 
+## Installation & Distribution
+
+Instead of executing raw binaries, TermTalk supports distribution through native package managers.
+
+### 🍺 macOS & Linux (Homebrew)
+
+Once released, you can install TermTalk via a Homebrew tap:
+
+```bash
+# Tap the repository
+brew tap T9ner/homebrew-tap
+
+# Install TermTalk
+brew install termtalk
+```
+
+**Build from Source locally**:
+You can compile and install TermTalk directly from the local formula file:
+```bash
+brew install --build-from-source ./packaging/homebrew/termtalk.rb
+```
+
+---
+
+### 📦 Windows (WinGet)
+
+Once published to the WinGet Community Repository, you can install it using:
+
+```cmd
+winget install T9ner.TermTalk
+```
+
+**Test the local manifest**:
+You can install and test the local manifest directly using:
+```cmd
+winget install --manifest ./packaging/winget/T9ner.TermTalk.yaml
+```
+
+---
+
 ## Build & Run
 
 ### Prerequisites
@@ -53,3 +93,4 @@ TermTalk is designed for local network instant messaging and asynchronous messag
    ```bash
    go vet ./...
    ```
+
