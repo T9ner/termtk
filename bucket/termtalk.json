@@ -1,0 +1,31 @@
+{
+    "version": "0.1.0",
+    "description": "Offline-first, decentralized terminal-based P2P messaging app",
+    "homepage": "https://github.com/T9ner/termtk",
+    "license": "MIT",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/T9ner/termtk/releases/download/v0.1.0/termtalk_windows_amd64.zip",
+            "hash": ""
+        },
+        "arm64": {
+            "url": "https://github.com/T9ner/termtk/releases/download/v0.1.0/termtalk_windows_arm64.zip",
+            "hash": ""
+        }
+    },
+    "bin": [
+        "termtalk.exe",
+        "termtalk-relay.exe"
+    ],
+    "checkver": "github",
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/T9ner/termtk/releases/download/v$version/termtalk_windows_amd64.zip"
+            },
+            "arm64": {
+                "url": "https://github.com/T9ner/termtk/releases/download/v$version/termtalk_windows_arm64.zip"
+            }
+        }
+    }
+}

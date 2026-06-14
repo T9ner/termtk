@@ -5,14 +5,16 @@ class Termtalk < Formula
   sha256 "0000000000000000000000000000000000000000000000000000000000000000" # Replace with actual SHA256 of release archive
   license "MIT"
 
+  head "https://github.com/T9ner/termtk.git", branch: "main"
+
   depends_on "go" => :build
 
   def install
-    # Build the main client binary
-    system "go", "build", *std_go_args(ldflags: "-s -w"), "./cmd/termtalk"
+    # Build and install termtalk client
+    system "go", "build", "-ldflags", "-s -w", "-o", bin/"termtalk", "./cmd/termtalk"
     
-    # Optionally build and install the relay binary too
-    # system "go", "build", *std_go_args(ldflags: "-s -w", output: bin/"termtalk-relay"), "./cmd/termtalk-relay"
+    # Build and install termtalk relay server
+    system "go", "build", "-ldflags", "-s -w", "-o", bin/"termtalk-relay", "./cmd/termtalk-relay"
   end
 
   test do
