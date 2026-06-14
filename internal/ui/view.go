@@ -95,7 +95,7 @@ func (m Model) viewDashboard() string {
 	// 1. Header
 	var headerStr string
 	if m.LocalUser != nil {
-		headerStr = titleStyle.Render(fmt.Sprintf(" TermTalk | User: %s (%s) ", m.LocalUser.Username, m.LocalUser.UUID[:8]))
+		headerStr = titleStyle.Render(fmt.Sprintf(" TermTalk | User: %s | Share ID: %s:%s ", m.LocalUser.Username, m.LocalUser.Username, m.LocalUser.UUID))
 	} else {
 		headerStr = titleStyle.Render(" TermTalk ")
 	}

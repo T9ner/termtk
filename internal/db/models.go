@@ -4,7 +4,17 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"time"
+
+	"github.com/google/uuid"
 )
+
+// NewProfile creates a Profile with a freshly generated UUID.
+func NewProfile(username string) (*Profile, error) {
+	return &Profile{
+		UUID:     uuid.New().String(),
+		Username: username,
+	}, nil
+}
 
 // Profile represents the local user's profile.
 type Profile struct {

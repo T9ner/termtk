@@ -50,7 +50,7 @@ func (d *Database) Close() error {
 	return d.conn.Close()
 }
 
-// migrate creates the necessary tables.
+// migrate creates the necessary tables and indexes.
 func (d *Database) migrate() error {
 	queries := []string{
 		`CREATE TABLE IF NOT EXISTS profile (
@@ -72,6 +72,8 @@ func (d *Database) migrate() error {
 			timestamp DATETIME NOT NULL,
 			status TEXT NOT NULL
 		);`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_sender_recipient ON messages(sender_uuid, recipient_uuid, timestamp);`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_recipient_sender ON messages(recipient_uuid, sender_uuid, timestamp);`,
 	}
 
 	for _, q := range queries {
@@ -176,9 +178,15 @@ func (d *Database) UpdateMessageStatus(id string, status string) error {
 func (d *Database) GetChatHistory(localUUID, contactUUID string) ([]Message, error) {
 	rows, err := d.conn.Query(
 		`SELECT id, sender_uuid, recipient_uuid, content, timestamp, status 
-		 FROM messages 
-		 WHERE (sender_uuid = ? AND recipient_uuid = ?) 
-		    OR (sender_uuid = ? AND recipient_uuid = ?) 
+		 FROM (
+			 SELECT id, sender_uuid, recipient_uuid, content, timestamp, status 
+			 FROM messages 
+			 WHERE sender_uuid = ? AND recipient_uuid = ?
+			 UNION ALL
+			 SELECT id, sender_uuid, recipient_uuid, content, timestamp, status 
+			 FROM messages 
+			 WHERE sender_uuid = ? AND recipient_uuid = ?
+		 )
 		 ORDER BY timestamp ASC`,
 		localUUID, contactUUID, contactUUID, localUUID,
 	)
