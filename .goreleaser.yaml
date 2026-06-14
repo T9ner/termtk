@@ -1,5 +1,6 @@
 # GoReleaser Configuration for TermTalk
 # For documentation, see https://goreleaser.com
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 
 version: 2
 project_name: termtalk
@@ -49,7 +50,8 @@ archives:
       - README.md
       - docs/**/*
 
-brews:
+# GoReleaser v2 uses homebrew_casks (replaces deprecated brews)
+homebrew_casks:
   - name: termtalk
     # Formula is pushed to your personal Homebrew Tap repository
     # e.g., github.com/T9ner/homebrew-tap
@@ -62,9 +64,3 @@ brews:
     homepage: "https://github.com/T9ner/termtk"
     description: "Offline-first, decentralized terminal messenger"
     license: "MIT"
-    
-    # Custom installation Ruby snippet for Brew
-    install: |
-      bin.install "termtalk"
-      # If they also want to install the relay binary:
-      # bin.install "termtalk-relay"
