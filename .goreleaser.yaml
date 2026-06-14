@@ -1,0 +1,70 @@
+# GoReleaser Configuration for TermTalk
+# For documentation, see https://goreleaser.com
+
+version: 2
+project_name: termtalk
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: termtalk
+    main: ./cmd/termtalk
+    binary: termtalk
+    goos:
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+  - id: termtalk-relay
+    main: ./cmd/termtalk-relay
+    binary: termtalk-relay
+    goos:
+      - darwin
+      - windows
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+archives:
+  - id: termtalk-archive
+    builds:
+      - termtalk
+      - termtalk-relay
+    format: zip
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - docs/**/*
+
+brews:
+  - name: termtalk
+    # Formula is pushed to your personal Homebrew Tap repository
+    # e.g., github.com/T9ner/homebrew-tap
+    repository:
+      owner: T9ner
+      name: homebrew-tap
+    commit_author:
+      name: GoReleaser Bot
+      email: bot@goreleaser.com
+    homepage: "https://github.com/T9ner/termtk"
+    description: "Offline-first, decentralized terminal messenger"
+    license: "MIT"
+    
+    # Custom installation Ruby snippet for Brew
+    install: |
+      bin.install "termtalk"
+      # If they also want to install the relay binary:
+      # bin.install "termtalk-relay"
