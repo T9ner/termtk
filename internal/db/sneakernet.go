@@ -46,10 +46,20 @@ func (d *Database) ExportSyncFile(contactUUID string, localProfile *Profile, exp
 	}
 
 	// 4. Mark exported messages as synced
+	tx, err := d.conn.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start export transaction: %w", err)
+	}
+	defer tx.Rollback()
+
 	for _, m := range unsynced {
-		if err := d.UpdateMessageStatus(m.ID, "synced"); err != nil {
+		_, err := tx.Exec("UPDATE messages SET status = ? WHERE id = ?", "synced", m.ID)
+		if err != nil {
 			return fmt.Errorf("failed to update message status after export: %w", err)
 		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit export transaction: %w", err)
 	}
 
 	return nil
@@ -69,6 +79,12 @@ func (d *Database) ImportSyncFile(importPath string) (*SyncFile, error) {
 		return nil, fmt.Errorf("failed to decode sync file JSON: %w", err)
 	}
 
+	tx, err := d.conn.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("failed to start import transaction: %w", err)
+	}
+	defer tx.Rollback()
+
 	// 3. Register the sender as a contact if they don't exist
 	senderContact := &Contact{
 		UUID:     payload.SenderUUID,
@@ -77,7 +93,7 @@ func (d *Database) ImportSyncFile(importPath string) (*SyncFile, error) {
 		Port:     0,
 		LastSeen: time.Now(),
 	}
-	if err := d.UpsertContact(senderContact); err != nil {
+	if err := d.upsertContactTx(tx, senderContact); err != nil {
 		return nil, fmt.Errorf("failed to register contact during import: %w", err)
 	}
 
@@ -92,9 +108,13 @@ func (d *Database) ImportSyncFile(importPath string) (*SyncFile, error) {
 
 		// Save/merge into the local database (upsert checks for duplicates)
 		msg.Status = "synced"
-		if err := d.SaveMessage(msg); err != nil {
+		if err := d.saveMessageTx(tx, msg); err != nil {
 			return nil, fmt.Errorf("failed to save message %s during import: %w", msg.ID, err)
 		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit import transaction: %w", err)
 	}
 
 	return &payload, nil

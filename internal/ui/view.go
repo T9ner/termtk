@@ -9,11 +9,11 @@ import (
 
 var (
 	// Colors
-	primaryColor   = lipgloss.Color("#5F5FD7") // Sleek Indigo
-	accentColor    = lipgloss.Color("#00FF87") // Neon Mint Green
-	grayColor      = lipgloss.Color("#8A8A8A")
-	errorColor     = lipgloss.Color("#D70000")
-	darkGrayColor  = lipgloss.Color("#262626")
+	primaryColor  = lipgloss.Color("#5F5FD7") // Sleek Indigo
+	accentColor   = lipgloss.Color("#00FF87") // Neon Mint Green
+	grayColor     = lipgloss.Color("#8A8A8A")
+	errorColor    = lipgloss.Color("#D70000")
+	darkGrayColor = lipgloss.Color("#262626")
 
 	// Styles
 	titleStyle = lipgloss.NewStyle().
@@ -30,11 +30,11 @@ var (
 	sidebarStyle = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder(), false, true, false, false).
 			BorderForeground(lipgloss.Color("#3A3A3A")).
-			PaddingRight(2).
-			Width(25)
+			PaddingRight(1).
+			Width(23) // 23 content + 1 padding + 1 border = 25 total
 
 	chatBoxStyle = lipgloss.NewStyle().
-			PaddingLeft(2)
+			PaddingLeft(1)
 
 	selectedStyle = lipgloss.NewStyle().
 			Bold(true).
@@ -114,7 +114,35 @@ func (m Model) viewDashboard() string {
 	if len(m.Contacts) == 0 {
 		sidebarBuilder.WriteString(lipgloss.NewStyle().Foreground(grayColor).Render("No contacts yet.\nUse Ctrl+N to add."))
 	} else {
-		for i, c := range m.Contacts {
+		maxVisible := m.Viewport.Height + 2
+		if maxVisible < 1 {
+			maxVisible = 1
+		}
+		start := 0
+		end := len(m.Contacts)
+		if len(m.Contacts) > maxVisible {
+			start = m.SelectedIdx - maxVisible/2
+			if start < 0 {
+				start = 0
+			}
+			end = start + maxVisible
+			if end > len(m.Contacts) {
+				end = len(m.Contacts)
+				start = end - maxVisible
+				if start < 0 {
+					start = 0
+				}
+			}
+		}
+
+		if start > 0 {
+			sidebarBuilder.WriteString(lipgloss.NewStyle().Foreground(grayColor).Render("  ↑ more\n"))
+		} else {
+			sidebarBuilder.WriteString("\n")
+		}
+
+		for i := start; i < end; i++ {
+			c := m.Contacts[i]
 			online := m.Client != nil && m.Client.IsPeerOnline(c.UUID)
 			badge := offlineBadge.Render("[OFF]")
 			if online {
@@ -132,6 +160,12 @@ func (m Model) viewDashboard() string {
 			} else {
 				sidebarBuilder.WriteString(normalContactStyle.Render(line) + "\n")
 			}
+		}
+
+		if end < len(m.Contacts) {
+			sidebarBuilder.WriteString(lipgloss.NewStyle().Foreground(grayColor).Render("  ↓ more\n"))
+		} else {
+			sidebarBuilder.WriteString("\n")
 		}
 	}
 	sidebarView := sidebarStyle.Render(sidebarBuilder.String())

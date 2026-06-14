@@ -13,10 +13,22 @@ import (
 // MockRelayServer represents an in-memory relay server for integration tests.
 type MockRelayServer struct {
 	listener net.Listener
-	clients  map[string]net.Conn
+	clients  map[string]*mockClientConn
 	mu       sync.Mutex
 	stopChan chan struct{}
 	wg       sync.WaitGroup
+}
+
+type mockClientConn struct {
+	conn net.Conn
+	enc  *json.Encoder
+	mu   sync.Mutex
+}
+
+func (mcc *mockClientConn) Send(frame RelayFrame) error {
+	mcc.mu.Lock()
+	defer mcc.mu.Unlock()
+	return mcc.enc.Encode(frame)
 }
 
 // StartMockRelay boots a mock relay server listening on the specified address.
@@ -28,7 +40,7 @@ func StartMockRelay(t *testing.T, addr string) *MockRelayServer {
 
 	mr := &MockRelayServer{
 		listener: l,
-		clients:  make(map[string]net.Conn),
+		clients:  make(map[string]*mockClientConn),
 		stopChan: make(chan struct{}),
 	}
 
@@ -44,7 +56,7 @@ func (mr *MockRelayServer) Stop() {
 	mr.listener.Close()
 	mr.mu.Lock()
 	for _, c := range mr.clients {
-		c.Close()
+		c.conn.Close()
 	}
 	mr.mu.Unlock()
 	mr.wg.Wait()
@@ -64,13 +76,17 @@ func (mr *MockRelayServer) acceptLoop() {
 func (mr *MockRelayServer) handleClient(conn net.Conn) {
 	dec := json.NewDecoder(conn)
 	enc := json.NewEncoder(conn)
-	var clientUUID string
+	var client *mockClientConn
 
 	defer func() {
 		conn.Close()
-		if clientUUID != "" {
+		if client != nil {
 			mr.mu.Lock()
-			delete(mr.clients, clientUUID)
+			for u, cc := range mr.clients {
+				if cc == client {
+					delete(mr.clients, u)
+				}
+			}
 			mr.mu.Unlock()
 		}
 	}()
@@ -83,26 +99,51 @@ func (mr *MockRelayServer) handleClient(conn net.Conn) {
 
 		switch frame.Type {
 		case "register":
-			clientUUID = frame.UUID
+			client = &mockClientConn{
+				conn: conn,
+				enc:  enc,
+			}
 			mr.mu.Lock()
-			mr.clients[clientUUID] = conn
+			if old, exists := mr.clients[frame.UUID]; exists {
+				old.conn.Close()
+			}
+			mr.clients[frame.UUID] = client
 			mr.mu.Unlock()
-			_ = enc.Encode(RelayFrame{Type: "registered"})
+			_ = client.Send(RelayFrame{Type: "registered"})
 
 		case "relay":
 			mr.mu.Lock()
-			targetConn, online := mr.clients[frame.Recipient]
+			target, online := mr.clients[frame.Recipient]
 			mr.mu.Unlock()
 
 			if online {
-				targetEnc := json.NewEncoder(targetConn)
-				_ = targetEnc.Encode(RelayFrame{
+				senderUUID := ""
+				mr.mu.Lock()
+				for u, cc := range mr.clients {
+					if cc == client {
+						senderUUID = u
+						break
+					}
+				}
+				mr.mu.Unlock()
+
+				_ = target.Send(RelayFrame{
 					Type:    "msg",
-					UUID:    clientUUID,
+					UUID:    senderUUID,
 					Message: frame.Message,
 				})
 			} else {
-				_ = enc.Encode(RelayFrame{Type: "offline", Recipient: frame.Recipient})
+				if client != nil {
+					_ = client.Send(RelayFrame{Type: "offline", Recipient: frame.Recipient})
+				} else {
+					_ = enc.Encode(RelayFrame{Type: "offline", Recipient: frame.Recipient})
+				}
+			}
+		case "ping":
+			if client != nil {
+				_ = client.Send(RelayFrame{Type: "pong"})
+			} else {
+				_ = enc.Encode(RelayFrame{Type: "pong"})
 			}
 		}
 	}
@@ -147,7 +188,15 @@ func TestSyncManagerViaRelay(t *testing.T) {
 	})
 
 	// Wait for registration on relay
-	time.Sleep(200 * time.Millisecond)
+	for i := 0; i < 50; i++ {
+		if aliceSync.IsRelayOnline() && bobSync.IsRelayOnline() {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if !aliceSync.IsRelayOnline() || !bobSync.IsRelayOnline() {
+		t.Fatalf("alice or bob failed to connect to relay in time")
+	}
 
 	// Bind Bob callback to wait for relayed message
 	messageReceived := make(chan *db.Message, 1)

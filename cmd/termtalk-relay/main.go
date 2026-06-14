@@ -15,7 +15,7 @@ type RelayFrame struct {
 	Type      string          `json:"type"`                // "register", "relay", "msg", "offline", "ping"
 	UUID      string          `json:"uuid,omitempty"`      // Client registration UUID
 	Username  string          `json:"username,omitempty"`  // Client registration Username
-	Recipient string          `json:"recipient,omitempty"`  // Target Recipient UUID
+	Recipient string          `json:"recipient,omitempty"` // Target Recipient UUID
 	Message   json.RawMessage `json:"message,omitempty"`   // Nested Message payload
 }
 
@@ -24,6 +24,13 @@ type ClientConn struct {
 	Username string
 	conn     net.Conn
 	enc      *json.Encoder
+	mu       sync.Mutex // Protects enc
+}
+
+func (cc *ClientConn) Send(frame RelayFrame) error {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+	return cc.enc.Encode(frame)
 }
 
 var (
@@ -64,7 +71,10 @@ func handleClient(conn net.Conn) {
 	defer func() {
 		if client != nil {
 			clientsMu.Lock()
-			delete(clients, client.UUID)
+			// Only delete if the active connection matches this connection instance
+			if clients[client.UUID] == client {
+				delete(clients, client.UUID)
+			}
 			clientsMu.Unlock()
 			log.Printf("Client disconnected: %s (%s)", client.Username, client.UUID[:8])
 		}
@@ -98,7 +108,7 @@ func handleClient(conn net.Conn) {
 			log.Printf("Client registered: %s (%s) from %s", client.Username, client.UUID[:8], conn.RemoteAddr())
 
 			// Respond with success ack
-			_ = enc.Encode(RelayFrame{Type: "registered"})
+			_ = client.Send(RelayFrame{Type: "registered"})
 
 		case "relay":
 			if client == nil {
@@ -114,22 +124,26 @@ func handleClient(conn net.Conn) {
 
 			if online {
 				// Forward message frame directly
-				err := target.enc.Encode(RelayFrame{
+				err := target.Send(RelayFrame{
 					Type:    "msg",
 					UUID:    client.UUID,
 					Message: frame.Message,
 				})
 				if err != nil {
 					log.Printf("Failed to forward message from %s to %s: %v", client.UUID[:8], recipientUUID[:8], err)
-					_ = enc.Encode(RelayFrame{Type: "offline", Recipient: recipientUUID})
+					_ = client.Send(RelayFrame{Type: "offline", Recipient: recipientUUID})
 				}
 			} else {
 				// Recipient is offline, notify sender
-				_ = enc.Encode(RelayFrame{Type: "offline", Recipient: recipientUUID})
+				_ = client.Send(RelayFrame{Type: "offline", Recipient: recipientUUID})
 			}
 
 		case "ping":
-			_ = enc.Encode(RelayFrame{Type: "pong"})
+			if client != nil {
+				_ = client.Send(RelayFrame{Type: "pong"})
+			} else {
+				_ = enc.Encode(RelayFrame{Type: "pong"})
+			}
 		}
 	}
 }
