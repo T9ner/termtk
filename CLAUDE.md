@@ -6,6 +6,7 @@
 - Run tests: `go test ./...`
 - Format code: `go fmt ./...`
 - Lint code: `go vet ./...`
+- Full project validation (fmt, lint, test, cross-compile): `go run scripts/validate.go`
 
 ## Agent skills
 

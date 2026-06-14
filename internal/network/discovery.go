@@ -12,21 +12,22 @@ import (
 )
 
 const (
-	DiscoveryPort    = 55555
-	DiscoveryPayload = "termtalk:discovery:%s:%s:%d" // termtalk:discovery:UUID:USERNAME:TCP_PORT
+	DiscoveryPort     = 55555
+	DiscoveryPayload  = "termtalk:discovery:%s:%s:%d" // termtalk:discovery:UUID:USERNAME:TCP_PORT
 	BroadcastInterval = 5 * time.Second
 )
 
 // PeerDiscovery handles local network peer detection via UDP broadcast.
 type PeerDiscovery struct {
-	localUUID  string
-	username   string
-	tcpPort    int
-	database   *db.Database
+	localUUID   string
+	username    string
+	tcpPort     int
+	database    *db.Database
 	activePeers map[string]*db.Contact
-	mu         sync.Mutex
-	stopChan   chan struct{}
-	wg         sync.WaitGroup
+	mu          sync.Mutex
+	stopChan    chan struct{}
+	stopOnce    sync.Once
+	wg          sync.WaitGroup
 	OnPeerFound func(contact *db.Contact)
 }
 
@@ -50,6 +51,13 @@ func (p *PeerDiscovery) UpdateCredentials(uuid, username string) {
 	p.username = username
 }
 
+// getCredentials safely reads credentials under lock.
+func (p *PeerDiscovery) getCredentials() (string, string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.localUUID, p.username
+}
+
 // Start spawns the listener and announcer background loops.
 func (p *PeerDiscovery) Start() error {
 	p.mu.Lock()
@@ -70,7 +78,9 @@ func (p *PeerDiscovery) Start() error {
 
 // Stop stops the discovery engine.
 func (p *PeerDiscovery) Stop() {
-	close(p.stopChan)
+	p.stopOnce.Do(func() {
+		close(p.stopChan)
+	})
 	p.wg.Wait()
 }
 
@@ -115,11 +125,13 @@ func (p *PeerDiscovery) listenLoop(conn net.PacketConn) {
 			}
 
 			peerUUID := parts[2]
-			peerUsername := parts[3]
-			peerPortStr := parts[4]
+			peerPortStr := parts[len(parts)-1]
+			// Join remaining segments as username in case it contains colons
+			peerUsername := strings.Join(parts[3:len(parts)-1], ":")
 
 			// Ignore self-announcements
-			if peerUUID == p.localUUID {
+			localUUID, _ := p.getCredentials()
+			if peerUUID == localUUID {
 				continue
 			}
 
@@ -167,13 +179,13 @@ func (p *PeerDiscovery) announceLoop() {
 	ticker := time.NewTicker(BroadcastInterval)
 	defer ticker.Stop()
 
-	payload := fmt.Sprintf(DiscoveryPayload, p.localUUID, p.username, p.tcpPort)
-
 	for {
 		select {
 		case <-p.stopChan:
 			return
 		case <-ticker.C:
+			localUUID, username := p.getCredentials()
+			payload := fmt.Sprintf(DiscoveryPayload, localUUID, username, p.tcpPort)
 			p.broadcast(payload)
 		}
 	}
