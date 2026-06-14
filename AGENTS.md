@@ -26,3 +26,13 @@ This workspace contains the source code, tests, designs, and tasks for **TermTal
 *   [CLAUDE.md](file:///C:/Users/HP/Desktop/termtk/CLAUDE.md): Quick command reference.
 *   [PRD.md](file:///C:/Users/HP/Desktop/termtk/.scratch/termtalk/PRD.md): Product Requirement Document.
 *   [issues/](file:///C:/Users/HP/Desktop/termtk/.scratch/termtalk/issues/): Local issue tracker containing the completed implementation tasks.
+*   [docs/ce_lessons.md](file:///C:/Users/HP/Desktop/termtk/docs/ce_lessons.md): Compound Engineering lessons log and regression-prevention memory.
+
+## Compound Engineering Instructions
+
+1. **Read-First Directive:** When starting a session or implementing a task, you MUST read [docs/ce_lessons.md](file:///C:/Users/HP/Desktop/termtk/docs/ce_lessons.md) to ensure no optimization regressions are introduced.
+2. **Log-Upon-Fix:** If you resolve a bug, complete a major refactoring, or apply a performance speedup:
+   - Run verification builds and tests.
+   - Document the problem, root cause, code change, and prevention rules inside [docs/ce_lessons.md](file:///C:/Users/HP/Desktop/termtk/docs/ce_lessons.md).
+3. **Verification Gate:** Before proposing any code changes to the user or closing an issue, the agent MUST run the validation script using `go run scripts/validate.go` and verify it passes (exit code 0).
+

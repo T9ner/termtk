@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"termtalk/internal/client"
 )
 
@@ -59,9 +60,16 @@ func (m *Model) ReloadMessages() {
 
 		// Format chat transcript
 		var builder strings.Builder
+		width := m.Viewport.Width
+		if width < 1 {
+			width = 40
+		}
+		msgStyle := lipgloss.NewStyle().Width(width)
+
 		for _, msg := range history {
 			timestamp := msg.Timestamp.Format("15:04:05")
 			statusStr := ""
+			var line string
 			if msg.Sender == m.LocalUser.UUID {
 				switch msg.Status {
 				case "draft":
@@ -71,10 +79,11 @@ func (m *Model) ReloadMessages() {
 				case "synced":
 					statusStr = " [✓]"
 				}
-				builder.WriteString(fmt.Sprintf("[%s] You: %s%s\n", timestamp, msg.Content, statusStr))
+				line = fmt.Sprintf("[%s] You: %s%s", timestamp, msg.Content, statusStr)
 			} else {
-				builder.WriteString(fmt.Sprintf("[%s] %s: %s\n", timestamp, contact.Username, msg.Content))
+				line = fmt.Sprintf("[%s] %s: %s", timestamp, contact.Username, msg.Content)
 			}
+			builder.WriteString(msgStyle.Render(line) + "\n")
 		}
 
 		m.Viewport.SetContent(builder.String())
@@ -98,10 +107,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Resize viewport and inputs based on layout sizing
 		sidebarWidth := 25
-		m.Viewport.Width = msg.Width - sidebarWidth - 4
-		m.Viewport.Height = msg.Height - 6 // Padding for header, input and helper footer
-		m.MsgInput.Width = msg.Width - sidebarWidth - 6
+		m.Viewport.Width = msg.Width - sidebarWidth - 1 // Leave room for chatBoxStyle padding
+
+		overhead := 9
+		if m.LocalUser != nil {
+			overhead += 2
+		}
+		m.Viewport.Height = msg.Height - overhead
+		if m.Viewport.Height < 1 {
+			m.Viewport.Height = 1
+		}
+		m.MsgInput.Width = m.Viewport.Width
 		m.PathInput.Width = msg.Width - 6
+
+		m.ReloadMessages()
 
 	case tea.KeyMsg:
 		switch msg.Type {
@@ -284,10 +303,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.ListenForEvents())
 	}
 
-	// Update viewport scroll position
+	// Update viewport scroll position (ignoring Up/Down arrow keys on Dashboard to avoid selection conflict)
 	var vpCmd tea.Cmd
-	m.Viewport, vpCmd = m.Viewport.Update(msg)
-	cmds = append(cmds, vpCmd)
+	shouldUpdateViewport := true
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		if m.State == StateDashboard && (keyMsg.Type == tea.KeyUp || keyMsg.Type == tea.KeyDown) {
+			shouldUpdateViewport = false
+		}
+	}
+
+	if shouldUpdateViewport {
+		m.Viewport, vpCmd = m.Viewport.Update(msg)
+		cmds = append(cmds, vpCmd)
+	}
 
 	return m, tea.Batch(cmds...)
 }

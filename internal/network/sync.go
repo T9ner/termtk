@@ -23,11 +23,11 @@ type Frame struct {
 
 // RelayFrame represents the message wrapper used by the relay server.
 type RelayFrame struct {
-	Type      string          `json:"type"`               // "register", "relay", "msg", "offline", "ping"
-	UUID      string          `json:"uuid,omitempty"`     // Client registration UUID
-	Username  string          `json:"username,omitempty"` // Client registration Username
+	Type      string          `json:"type"`                // "register", "relay", "msg", "offline", "ping"
+	UUID      string          `json:"uuid,omitempty"`      // Client registration UUID
+	Username  string          `json:"username,omitempty"`  // Client registration Username
 	Recipient string          `json:"recipient,omitempty"` // Target Recipient UUID
-	Message   json.RawMessage `json:"message,omitempty"`  // Nested Frame payload
+	Message   json.RawMessage `json:"message,omitempty"`   // Nested Frame payload
 }
 
 // PeerConnection wraps an active TCP connection to a peer.
@@ -115,6 +115,20 @@ func (sm *SyncManager) UpdateCredentials(uuid, username string) {
 	sm.username = username
 }
 
+// getLocalUUID safely reads localUUID under lock.
+func (sm *SyncManager) getLocalUUID() string {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	return sm.localUUID
+}
+
+// getUsername safely reads username under lock.
+func (sm *SyncManager) getUsername() string {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	return sm.username
+}
+
 // Start starts the TCP server listening for incoming connections and the relay connection loop.
 func (sm *SyncManager) Start() error {
 	sm.mu.Lock()
@@ -137,12 +151,19 @@ func (sm *SyncManager) Start() error {
 
 // Stop closes the TCP listener and all active connections.
 func (sm *SyncManager) Stop() {
-	close(sm.stopChan)
+	sm.mu.Lock()
+	// Protect stop channel closure
+	select {
+	case <-sm.stopChan:
+		sm.mu.Unlock()
+		return
+	default:
+		close(sm.stopChan)
+	}
 	if sm.listener != nil {
 		sm.listener.Close()
 	}
 
-	sm.mu.Lock()
 	for _, pc := range sm.activeConn {
 		pc.Close()
 	}
@@ -171,13 +192,18 @@ func (sm *SyncManager) ConnectToPeer(c *db.Contact) error {
 		return err
 	}
 
+	// Set short deadline for handshake setup
+	conn.SetDeadline(time.Now().Add(5 * time.Second))
+
 	pc := NewPeerConnection(conn)
 
 	// Perform Handshake
+	localUUID := sm.getLocalUUID()
+	username := sm.getUsername()
 	err = pc.Send(Frame{
 		Type:     "handshake",
-		UUID:     sm.localUUID,
-		Username: sm.username,
+		UUID:     localUUID,
+		Username: username,
 	})
 	if err != nil {
 		conn.Close()
@@ -190,11 +216,17 @@ func (sm *SyncManager) ConnectToPeer(c *db.Contact) error {
 		return fmt.Errorf("handshake response failed: %w", err)
 	}
 
+	// Reset connection deadline after successful handshake
+	conn.SetDeadline(time.Time{})
+
 	pc.UUID = resp.UUID
 	pc.Username = resp.Username
 
-	// Track connection
+	// Track connection, closing duplicate active connections if found
 	sm.mu.Lock()
+	if oldPc, exists := sm.activeConn[pc.UUID]; exists {
+		oldPc.Close()
+	}
 	sm.activeConn[pc.UUID] = pc
 	sm.mu.Unlock()
 
@@ -209,8 +241,9 @@ func (sm *SyncManager) ConnectToPeer(c *db.Contact) error {
 
 // SendMessage sends a message to a peer. If peer is online locally, it transmits via TCP. Otherwise, it fallbacks to the relay server.
 func (sm *SyncManager) SendMessage(peerUUID string, content string) error {
+	localUUID := sm.getLocalUUID()
 	msg := &db.Message{
-		Sender:    sm.localUUID,
+		Sender:    localUUID,
 		Recipient: peerUUID,
 		Content:   content,
 		Timestamp: time.Now(),
@@ -263,7 +296,8 @@ func (sm *SyncManager) SendMessage(peerUUID string, content string) error {
 
 // SyncHistory exchanges message hashes and syncs history.
 func (sm *SyncManager) SyncHistory(pc *PeerConnection) {
-	history, err := sm.db.GetChatHistory(sm.localUUID, pc.UUID)
+	localUUID := sm.getLocalUUID()
+	history, err := sm.db.GetChatHistory(localUUID, pc.UUID)
 	if err != nil {
 		return
 	}
@@ -337,10 +371,12 @@ func (sm *SyncManager) handleIncomingHandshake(conn net.Conn) {
 	pc.Username = frame.Username
 
 	// Respond to Handshake
+	localUUID := sm.getLocalUUID()
+	username := sm.getUsername()
 	err := pc.Send(Frame{
 		Type:     "handshake",
-		UUID:     sm.localUUID,
-		Username: sm.username,
+		UUID:     localUUID,
+		Username: username,
 	})
 	if err != nil {
 		conn.Close()
@@ -395,7 +431,8 @@ func (sm *SyncManager) handleConnection(pc *PeerConnection) {
 
 // handleSyncList processes the message log comparison.
 func (sm *SyncManager) handleSyncList(peerUUID string, peerHashes []string, sendFunc func(Frame)) {
-	history, err := sm.db.GetChatHistory(sm.localUUID, peerUUID)
+	localUUID := sm.getLocalUUID()
+	history, err := sm.db.GetChatHistory(localUUID, peerUUID)
 	if err != nil {
 		return
 	}
@@ -438,7 +475,8 @@ func (sm *SyncManager) handleSyncList(peerUUID string, peerHashes []string, send
 
 // handleSyncRequest processes requests for missing messages.
 func (sm *SyncManager) handleSyncRequest(peerUUID string, requestedHashes []string, sendFunc func(Frame)) {
-	history, err := sm.db.GetChatHistory(sm.localUUID, peerUUID)
+	localUUID := sm.getLocalUUID()
+	history, err := sm.db.GetChatHistory(localUUID, peerUUID)
 	if err != nil {
 		return
 	}
@@ -482,14 +520,15 @@ func (sm *SyncManager) handleIncomingMessage(peerUUID string, m *db.Message) {
 		return
 	}
 
-	if m.Recipient == sm.localUUID && m.Sender == peerUUID {
+	localUUID := sm.getLocalUUID()
+	if m.Recipient == localUUID && m.Sender == peerUUID {
 		if sm.OnMsgRecv != nil {
 			sm.OnMsgRecv(m)
 		}
 
 		// Send delivery confirmation ACK back
 		ackMsg := &db.Message{
-			Sender:    sm.localUUID,
+			Sender:    localUUID,
 			Recipient: peerUUID,
 			Content:   m.ID,
 			Timestamp: time.Now(),
@@ -524,9 +563,9 @@ func (sm *SyncManager) relayLoop() {
 		case <-sm.stopChan:
 			return
 		default:
+			localUUID := sm.getLocalUUID()
+			username := sm.getUsername()
 			sm.relayMu.Lock()
-			localUUID := sm.localUUID
-			username := sm.username
 			addr := sm.relayAddr
 			sm.relayMu.Unlock()
 
@@ -576,11 +615,39 @@ func (sm *SyncManager) relayLoop() {
 			go sm.triggerRelaySyncAll()
 
 			errChan := make(chan error, 1)
+			pingStop := make(chan struct{})
+			var closeOnce sync.Once
+			closePing := func() {
+				closeOnce.Do(func() {
+					close(pingStop)
+				})
+			}
+
+			// Relay Keepalive Heartbeat loop
+			go func() {
+				ticker := time.NewTicker(30 * time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ticker.C:
+						sm.relayMu.Lock()
+						enc := sm.relayEnc
+						sm.relayMu.Unlock()
+						if enc != nil {
+							_ = enc.Encode(RelayFrame{Type: "ping"})
+						}
+					case <-pingStop:
+						return
+					}
+				}
+			}()
+
 			go func() {
 				for {
 					var frame RelayFrame
 					if err := dec.Decode(&frame); err != nil {
 						errChan <- err
+						closePing()
 						return
 					}
 
@@ -595,6 +662,7 @@ func (sm *SyncManager) relayLoop() {
 
 			select {
 			case <-sm.stopChan:
+				closePing()
 				conn.Close()
 				return
 			case <-errChan:
@@ -635,8 +703,9 @@ func (sm *SyncManager) triggerRelaySyncAll() {
 		return
 	}
 
+	localUUID := sm.getLocalUUID()
 	for _, c := range contacts {
-		history, err := sm.db.GetChatHistory(sm.localUUID, c.UUID)
+		history, err := sm.db.GetChatHistory(localUUID, c.UUID)
 		if err != nil {
 			continue
 		}

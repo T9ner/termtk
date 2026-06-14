@@ -30,11 +30,20 @@ func NewDatabase(dbPath string) (*Database, error) {
 	}
 
 	// Optimize SQLite for concurrency and durability
-	_, err = db.Exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")
+	pragmas := `
+		PRAGMA journal_mode=WAL;
+		PRAGMA synchronous=NORMAL;
+		PRAGMA temp_store=MEMORY;
+		PRAGMA cache_size=-64000;
+		PRAGMA busy_timeout=5000;`
+	_, err = db.Exec(pragmas)
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("failed to configure sqlite pragma: %w", err)
 	}
+
+	// Prevent SQLITE_BUSY deadlocks by serializing connection access in Go
+	db.SetMaxOpenConns(1)
 
 	d := &Database{conn: db}
 	if err := d.migrate(); err != nil {
@@ -74,6 +83,8 @@ func (d *Database) migrate() error {
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_sender_recipient ON messages(sender_uuid, recipient_uuid, timestamp);`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_recipient_sender ON messages(recipient_uuid, sender_uuid, timestamp);`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_unsynced_sender ON messages(sender_uuid) WHERE status != 'synced';`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_unsynced_recipient ON messages(recipient_uuid) WHERE status != 'synced';`,
 	}
 
 	for _, q := range queries {
@@ -106,9 +117,9 @@ func (d *Database) SaveProfile(p *Profile) error {
 	return err
 }
 
-// UpsertContact inserts or updates a peer's details in the contacts table.
-func (d *Database) UpsertContact(c *Contact) error {
-	_, err := d.conn.Exec(
+// upsertContactTx inserts or updates a peer's details in the contacts table inside a transaction.
+func (d *Database) upsertContactTx(tx *sql.Tx, c *Contact) error {
+	_, err := tx.Exec(
 		`INSERT INTO contacts (uuid, username, ip, port, last_seen) 
 		 VALUES (?, ?, ?, ?, ?) 
 		 ON CONFLICT(uuid) DO UPDATE SET 
@@ -119,6 +130,19 @@ func (d *Database) UpsertContact(c *Contact) error {
 		c.UUID, c.Username, c.IP, c.Port, c.LastSeen,
 	)
 	return err
+}
+
+// UpsertContact inserts or updates a peer's details in the contacts table.
+func (d *Database) UpsertContact(c *Contact) error {
+	tx, err := d.conn.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := d.upsertContactTx(tx, c); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // GetContact retrieves a single contact by their UUID.
@@ -154,18 +178,31 @@ func (d *Database) ListContacts() ([]Contact, error) {
 	return contacts, nil
 }
 
-// SaveMessage stores a message in the database.
-func (d *Database) SaveMessage(m *Message) error {
+// saveMessageTx stores a message in the database inside a transaction.
+func (d *Database) saveMessageTx(tx *sql.Tx, m *Message) error {
 	if m.ID == "" {
 		m.ID = m.GenerateID()
 	}
-	_, err := d.conn.Exec(
+	_, err := tx.Exec(
 		`INSERT INTO messages (id, sender_uuid, recipient_uuid, content, timestamp, status) 
 		 VALUES (?, ?, ?, ?, ?, ?) 
 		 ON CONFLICT(id) DO UPDATE SET status = excluded.status`,
 		m.ID, m.Sender, m.Recipient, m.Content, m.Timestamp, m.Status,
 	)
 	return err
+}
+
+// SaveMessage stores a message in the database.
+func (d *Database) SaveMessage(m *Message) error {
+	tx, err := d.conn.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := d.saveMessageTx(tx, m); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // UpdateMessageStatus updates the status of a specific message.
