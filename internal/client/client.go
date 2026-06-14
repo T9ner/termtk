@@ -69,6 +69,13 @@ func New(dbPath string, tcpPort int) (*Client, error) {
 	return c, nil
 }
 
+// SetRelayAddr updates the relay server address for the SyncManager.
+func (c *Client) SetRelayAddr(addr string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.syncMgr.SetRelayAddr(addr)
+}
+
 // GetProfile returns the locally cached profile, or nil if not yet registered.
 func (c *Client) GetProfile() *db.Profile {
 	c.mu.RLock()

@@ -7,8 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/google/uuid"
-	"termtalk/internal/db"
+	"termtalk/internal/client"
 )
 
 // Init triggers the initial listening command for background events.
@@ -22,7 +21,7 @@ func (m Model) Init() tea.Cmd {
 // ListenForEvents blocks waiting for a background event, then returns it.
 func (m Model) ListenForEvents() tea.Cmd {
 	return func() tea.Msg {
-		return <-m.EventChan
+		return <-m.Client.Events()
 	}
 }
 
@@ -34,10 +33,10 @@ func (m *Model) SetStatus(msg string, duration time.Duration) {
 
 // RefreshContacts reloads the list of contacts from the database.
 func (m *Model) RefreshContacts() {
-	if m.DB == nil {
+	if m.Client == nil {
 		return
 	}
-	contacts, err := m.DB.ListContacts()
+	contacts, err := m.Client.ListContacts()
 	if err == nil {
 		m.Contacts = contacts
 		if m.SelectedIdx == -1 && len(contacts) > 0 {
@@ -49,12 +48,12 @@ func (m *Model) RefreshContacts() {
 
 // ReloadMessages fetches message logs for the active conversation.
 func (m *Model) ReloadMessages() {
-	if m.DB == nil || m.SelectedIdx < 0 || m.SelectedIdx >= len(m.Contacts) || m.LocalUser == nil {
+	if m.Client == nil || m.SelectedIdx < 0 || m.SelectedIdx >= len(m.Contacts) || m.LocalUser == nil {
 		return
 	}
 
 	contact := m.Contacts[m.SelectedIdx]
-	history, err := m.DB.GetChatHistory(m.LocalUser.UUID, contact.UUID)
+	history, err := m.Client.GetChatHistory(contact.UUID)
 	if err == nil {
 		m.ChatHistory = history
 
@@ -120,24 +119,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.Type == tea.KeyEnter {
 				username := strings.TrimSpace(m.UsernameInput.Value())
 				if username != "" {
-					userUUID := uuid.New().String()
-					profile := &db.Profile{
-						UUID:     userUUID,
-						Username: username,
+					profile, err := m.Client.Register(username)
+					if err == nil {
+						m.LocalUser = profile
+						_ = m.Client.Start()
+						m.State = StateDashboard
+						m.RefreshContacts()
+						m.MsgInput.Focus()
 					}
-					_ = m.DB.SaveProfile(profile)
-					m.LocalUser = profile
-
-					// Start network engines with profile info
-					m.SyncManager.UpdateCredentials(userUUID, username)
-					_ = m.SyncManager.Start()
-
-					m.Discovery.UpdateCredentials(userUUID, username)
-					_ = m.Discovery.Start()
-
-					m.State = StateDashboard
-					m.RefreshContacts()
-					m.MsgInput.Focus()
 				}
 			}
 
@@ -183,7 +172,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				text := strings.TrimSpace(m.MsgInput.Value())
 				if text != "" && m.SelectedIdx >= 0 {
 					contact := m.Contacts[m.SelectedIdx]
-					_ = m.SyncManager.SendMessage(contact.UUID, text)
+					_ = m.Client.SendMessage(contact.UUID, text)
 					m.MsgInput.SetValue("")
 					m.ReloadMessages()
 				}
@@ -210,7 +199,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				path := strings.TrimSpace(m.PathInput.Value())
 				if path != "" && m.SelectedIdx >= 0 {
 					contact := m.Contacts[m.SelectedIdx]
-					err := m.DB.ExportSyncFile(contact.UUID, m.LocalUser, path)
+					err := m.Client.ExportSync(contact.UUID, path)
 					if err != nil {
 						m.SetStatus(fmt.Sprintf("Export failed: %v", err), 4*time.Second)
 					} else {
@@ -236,7 +225,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.Type == tea.KeyEnter {
 				path := strings.TrimSpace(m.PathInput.Value())
 				if path != "" {
-					file, err := m.DB.ImportSyncFile(path)
+					file, err := m.Client.ImportSync(path)
 					if err != nil {
 						m.SetStatus(fmt.Sprintf("Import failed: %v", err), 4*time.Second)
 					} else {
@@ -263,16 +252,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				val := strings.TrimSpace(m.AddContactInput.Value())
 				parts := strings.Split(val, ":")
 				if len(parts) == 2 {
-					c := &db.Contact{
-						Username: parts[0],
-						UUID:     parts[1],
-						IP:       "offline",
-						Port:     0,
-						LastSeen: time.Now(),
+					err := m.Client.AddContact(parts[0], parts[1])
+					if err != nil {
+						m.SetStatus(fmt.Sprintf("Failed to add contact: %v", err), 3*time.Second)
+					} else {
+						m.SetStatus(fmt.Sprintf("Added contact %s", parts[0]), 3*time.Second)
+						m.RefreshContacts()
 					}
-					_ = m.DB.UpsertContact(c)
-					m.SetStatus(fmt.Sprintf("Added contact %s", c.Username), 3*time.Second)
-					m.RefreshContacts()
 					m.State = StateDashboard
 					m.MsgInput.Focus()
 				} else {
@@ -281,18 +267,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-	case PeerDiscoveredMsg:
+	case client.PeerDiscoveredEvent:
 		m.RefreshContacts()
 		// Try to connect directly to peer over TCP if discovered
 		if msg.Contact != nil {
 			go func() {
-				_ = m.SyncManager.ConnectToPeer(msg.Contact)
+				_ = m.Client.ConnectToPeer(msg.Contact)
 			}()
 		}
 		// Re-trigger listener
 		cmds = append(cmds, m.ListenForEvents())
 
-	case MessageReceivedMsg:
+	case client.MessageReceivedEvent:
 		m.ReloadMessages()
 		// Re-trigger listener
 		cmds = append(cmds, m.ListenForEvents())
