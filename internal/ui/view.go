@@ -94,8 +94,16 @@ func (m Model) viewRegister() string {
 func (m Model) viewDashboard() string {
 	// 1. Header
 	var headerStr string
+	var shareBanner string
 	if m.LocalUser != nil {
-		headerStr = titleStyle.Render(fmt.Sprintf(" TermTalk | User: %s | Share ID: %s:%s ", m.LocalUser.Username, m.LocalUser.Username, m.LocalUser.UUID))
+		headerStr = titleStyle.Render(fmt.Sprintf(" TermTalk | User: %s ", m.LocalUser.Username))
+		shareBanner = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFF")).
+			Background(lipgloss.Color("#2D2D2D")).
+			Bold(true).
+			Padding(0, 1).
+			MarginBottom(1).
+			Render(fmt.Sprintf("Your Share ID (copy to share): %s:%s", m.LocalUser.Username, m.LocalUser.UUID))
 	} else {
 		headerStr = titleStyle.Render(" TermTalk ")
 	}
@@ -157,6 +165,9 @@ func (m Model) viewDashboard() string {
 	footerBuilder.WriteString(footerStyle.Render("Ctrl+N: Add Peer | Ctrl+E: Export Sync | Ctrl+I: Import Sync | Ctrl+Q: Quit"))
 	footerView := footerBuilder.String()
 
+	if shareBanner != "" {
+		return lipgloss.JoinVertical(lipgloss.Left, headerStr, shareBanner, bodyView, footerView)
+	}
 	return lipgloss.JoinVertical(lipgloss.Left, headerStr, bodyView, footerView)
 }
 
