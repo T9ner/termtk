@@ -41,10 +41,11 @@ builds:
 
 archives:
   - id: termtalk-archive
-    builds:
+    ids:
       - termtalk
       - termtalk-relay
-    format: zip
+    formats:
+      - zip
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
