@@ -40,6 +40,7 @@ const (
 	StatusStored MessageStatus = "stored" // Relay has it, recipient offline
 	StatusSynced MessageStatus = "synced"
 	StatusAck    MessageStatus = "ack"
+	StatusRead   MessageStatus = "read" // Recipient has opened and read the message
 )
 
 // Message represents a direct message between the local user and a contact.

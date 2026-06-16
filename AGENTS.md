@@ -67,6 +67,9 @@ Update parent docs when parent-level structure, ownership, workflow, or child in
 - [.agents/skills/](file:///C:/Users/HP/Desktop/termtk/.agents/skills): Agent skills for this workspace. Managed by [.agents/skills/AGENTS.md](file:///C:/Users/HP/Desktop/termtk/.agents/skills/AGENTS.md).
 - [scripts/validate.go](file:///C:/Users/HP/Desktop/termtk/scripts/validate.go): Verification gate — runs fmt → vet → test → cross-compile.
 - [LICENSE](file:///C:/Users/HP/Desktop/termtk/LICENSE): MIT License (2026, TermTalk Contributors).
+- [Dockerfile](file:///C:/Users/HP/Desktop/termtk/Dockerfile): Multi-stage Docker build for the relay server (Fly.io deployment).
+- [fly.toml](file:///C:/Users/HP/Desktop/termtk/fly.toml): Fly.io deployment config — London (lhr) primary region, TCP passthrough.
+- [.dockerignore](file:///C:/Users/HP/Desktop/termtk/.dockerignore): Docker build context exclusions.
 
 ### Key Reference Documents
 

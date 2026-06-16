@@ -1,0 +1,24 @@
+app = 'termtalk-relay'
+primary_region = 'lhr'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[[services]]
+  protocol = 'tcp'
+  internal_port = 55558
+
+  [[services.ports]]
+    port = 55558
+
+  [services.concurrency]
+    type = 'connections'
+    hard_limit = 1000
+    soft_limit = 500
+
+[checks]
+  [checks.alive]
+    type = 'tcp'
+    port = 55558
+    interval = '15s'
+    timeout = '2s'
