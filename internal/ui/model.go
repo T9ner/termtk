@@ -16,6 +16,7 @@ const (
 	StateImport
 	StateAddContact
 	StateProfile
+	StateSearch
 )
 
 // FocusMode indicates which pane has keyboard focus on the dashboard.
@@ -25,6 +26,14 @@ const (
 	FocusSidebar FocusMode = iota
 	FocusChat
 )
+
+// SearchResult holds user info from relay search responses.
+// Temporary local type until protocol package adds UserInfo.
+type SearchResult struct {
+	UUID     string
+	Username string
+	Online   bool
+}
 
 // Model represents the state of the TermTalk TUI application.
 type Model struct {
@@ -50,6 +59,11 @@ type Model struct {
 	TerminalHeight int
 	StatusMessage  string
 	StatusExpiry   int64 // Unix time for when status should clear
+
+	// Search state
+	SearchResults     []SearchResult
+	SearchInput       textinput.Model
+	SearchSelectedIdx int
 }
 
 // NewModel initializes the Bubble Tea model with the Client reference.
@@ -72,6 +86,9 @@ func NewModel(c *client.Client) *Model {
 
 	m.AddContactInput = textinput.New()
 	m.AddContactInput.Placeholder = "username:uuid..."
+
+	m.SearchInput = textinput.New()
+	m.SearchInput.Placeholder = "Search by username..."
 
 	m.Viewport = viewport.New(0, 0)
 	m.Viewport.SetContent("Select a contact to start messaging.")

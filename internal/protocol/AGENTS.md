@@ -9,7 +9,24 @@ Package `protocol` defines shared wire-format types for TermTalk's relay protoco
 
 ## Ownership
 
-- [frames.go](file:///C:/Users/HP/Desktop/termtk/internal/protocol/frames.go): `RelayFrame` struct — the envelope type for all relay communication (register, message, ping, pong, sync_request, sync_response)
+- [frames.go](file:///C:/Users/HP/Desktop/termtk/internal/protocol/frames.go): `RelayFrame` struct — the envelope type for all relay communication. `UserInfo` struct — user identity in search/online results
+
+### Frame Types
+
+| Type | Direction | Purpose |
+|------|-----------|----------|
+| `register` | client→relay | Register with UUID and username |
+| `registered` | relay→client | Registration acknowledgement |
+| `relay` | client→relay | Route a message to a recipient |
+| `msg` | relay→client | Incoming message from another peer |
+| `offline` | relay→client | Recipient is not connected |
+| `stored` | relay→client | Message stored for offline recipient |
+| `delivered` | relay→client | Stored message was delivered |
+| `search` | client→relay | Search users by username query |
+| `search_result` | relay→client | List of matching users |
+| `who_online` | client→relay | Request list of online users |
+| `online_list` | relay→client | List of online users |
+| `ping`/`pong` | both | Keepalive heartbeat |
 
 ## Local Contracts
 

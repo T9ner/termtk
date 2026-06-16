@@ -10,7 +10,7 @@ Package `network` handles all network communication for TermTalk — real-time p
 ## Ownership
 
 - [discovery.go](file:///C:/Users/HP/Desktop/termtk/internal/network/discovery.go): UDP broadcast daemon for auto-detecting peers on local Wi-Fi (`DiscoveryPort` 55555)
-- [sync.go](file:///C:/Users/HP/Desktop/termtk/internal/network/sync.go): TCP sync manager — peer handshakes, message history negotiation, relay client lifecycle, keepalive heartbeat
+- [sync.go](file:///C:/Users/HP/Desktop/termtk/internal/network/sync.go): TCP sync manager — peer handshakes, message history negotiation, relay client lifecycle, keepalive heartbeat, search/who_online requests, store-and-forward ack handling (stored/delivered), and outbox drain on reconnect
 
 ## Local Contracts
 
@@ -24,7 +24,9 @@ Package `network` handles all network communication for TermTalk — real-time p
 
 - `sync.go` is the largest file (739 lines). Future refactoring should split into local sync and relay sync
 - Broadcast packets are UDP — handle timeouts, packet losses, and formatting issues gracefully
-- The `SyncManager` exposes callbacks (`OnMessageReceived`, `OnPeerFound`) — these run on network goroutines, so keep them non-blocking
+- The `SyncManager` exposes callbacks (`OnMsgRecv`, `OnSearchResult`, `OnOnlineList`) — these run on network goroutines, so keep them non-blocking
+- `SendSearchRequest(query)` and `SendWhoOnline()` encode frames directly to the relay encoder — call only when relay is online
+- `drainOutbox()` runs automatically on relay connect — re-sends all locally queued messages
 
 ## Verification
 
