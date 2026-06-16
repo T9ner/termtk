@@ -37,6 +37,7 @@ type MessageStatus string
 const (
 	StatusDraft  MessageStatus = "draft"
 	StatusQueued MessageStatus = "queued"
+	StatusStored MessageStatus = "stored" // Relay has it, recipient offline
 	StatusSynced MessageStatus = "synced"
 	StatusAck    MessageStatus = "ack"
 )

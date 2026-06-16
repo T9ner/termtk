@@ -76,6 +76,10 @@ type SyncManager struct {
 	relayDec    *json.Decoder
 	relayOnline bool
 	relayMu     sync.Mutex
+
+	// Relay event callbacks (set by Client before Start)
+	OnSearchResult func(users []protocol.UserInfo)
+	OnOnlineList   func(users []protocol.UserInfo)
 }
 
 // DefaultRelayAddr is the public TermTalk relay node hosted on Fly.io
@@ -316,22 +320,21 @@ func (sm *SyncManager) SyncHistory(pc *PeerConnection) {
 }
 
 // sendRelayFrame encapsulates and sends a Frame to the relay server.
+// The relayMu is held for the entire Encode() call to prevent concurrent writes (CE-002).
 func (sm *SyncManager) sendRelayFrame(recipientUUID string, f Frame) error {
-	sm.relayMu.Lock()
-	enc := sm.relayEnc
-	online := sm.relayOnline
-	sm.relayMu.Unlock()
-
-	if !online || enc == nil {
-		return fmt.Errorf("relay offline")
-	}
-
 	payload, err := json.Marshal(f)
 	if err != nil {
 		return err
 	}
 
-	return enc.Encode(protocol.RelayFrame{
+	sm.relayMu.Lock()
+	defer sm.relayMu.Unlock()
+
+	if !sm.relayOnline || sm.relayEnc == nil {
+		return fmt.Errorf("relay offline")
+	}
+
+	return sm.relayEnc.Encode(protocol.RelayFrame{
 		Type:      "relay",
 		Recipient: recipientUUID,
 		Message:   payload,
@@ -631,8 +634,8 @@ func (sm *SyncManager) relayLoop(ctx context.Context) {
 
 			log.Printf("Successfully registered on TermTalk Relay: %s", addr)
 
-			// Trigger automatic history synchronization for all known contacts
-			go sm.triggerRelaySyncAll()
+			// Drain locally queued messages through the relay
+			go sm.drainOutbox()
 
 			errChan := make(chan error, 1)
 			pingStop := make(chan struct{})
@@ -651,13 +654,12 @@ func (sm *SyncManager) relayLoop(ctx context.Context) {
 					select {
 					case <-ticker.C:
 						sm.relayMu.Lock()
-						enc := sm.relayEnc
-						sm.relayMu.Unlock()
-						if enc != nil {
-							if err := enc.Encode(protocol.RelayFrame{Type: "ping"}); err != nil {
+						if sm.relayEnc != nil {
+							if err := sm.relayEnc.Encode(protocol.RelayFrame{Type: "ping"}); err != nil {
 								log.Printf("sync: failed to send relay ping: %v", err)
 							}
 						}
+						sm.relayMu.Unlock()
 					case <-pingStop:
 						return
 					}
@@ -673,10 +675,31 @@ func (sm *SyncManager) relayLoop(ctx context.Context) {
 						return
 					}
 
-					if frame.Type == "msg" {
+					switch frame.Type {
+					case "msg":
 						var inner Frame
 						if err := json.Unmarshal(frame.Message, &inner); err == nil {
 							sm.handleRelayFrame(frame.UUID, inner)
+						}
+					case "stored":
+						if frame.MessageID != "" {
+							if err := sm.db.UpdateMessageStatus(frame.MessageID, string(db.StatusStored)); err != nil {
+								log.Printf("sync: failed to update message %s to stored: %v", frame.MessageID, err)
+							}
+						}
+					case "delivered":
+						if frame.MessageID != "" {
+							if err := sm.db.UpdateMessageStatus(frame.MessageID, string(db.StatusSynced)); err != nil {
+								log.Printf("sync: failed to update message %s to synced: %v", frame.MessageID, err)
+							}
+						}
+					case "search_result":
+						if sm.OnSearchResult != nil {
+							sm.OnSearchResult(frame.Users)
+						}
+					case "online_list":
+						if sm.OnOnlineList != nil {
+							sm.OnOnlineList(frame.Users)
 						}
 					}
 				}
@@ -772,4 +795,64 @@ func (sm *SyncManager) ListenerPort() int {
 		return 0
 	}
 	return sm.listener.Addr().(*net.TCPAddr).Port
+}
+
+// SendSearchRequest sends a search query to the relay server.
+func (sm *SyncManager) SendSearchRequest(query string) error {
+	sm.relayMu.Lock()
+	defer sm.relayMu.Unlock()
+
+	if !sm.relayOnline || sm.relayEnc == nil {
+		return fmt.Errorf("relay offline")
+	}
+
+	return sm.relayEnc.Encode(protocol.RelayFrame{
+		Type:  "search",
+		Query: query,
+	})
+}
+
+// SendWhoOnline requests the list of online users from the relay server.
+func (sm *SyncManager) SendWhoOnline() error {
+	sm.relayMu.Lock()
+	defer sm.relayMu.Unlock()
+
+	if !sm.relayOnline || sm.relayEnc == nil {
+		return fmt.Errorf("relay offline")
+	}
+
+	return sm.relayEnc.Encode(protocol.RelayFrame{
+		Type: "who_online",
+	})
+}
+
+// drainOutbox re-sends all locally queued messages through the relay after connecting.
+func (sm *SyncManager) drainOutbox() {
+	time.Sleep(500 * time.Millisecond) // Let registration settle
+
+	localUUID := sm.getLocalUUID()
+	if localUUID == "" {
+		return
+	}
+
+	msgs, err := sm.db.GetQueuedMessages(localUUID)
+	if err != nil {
+		log.Printf("sync: drainOutbox: failed to query queued messages: %v", err)
+		return
+	}
+
+	if len(msgs) == 0 {
+		return
+	}
+
+	log.Printf("sync: draining outbox: %d queued messages", len(msgs))
+
+	for _, msg := range msgs {
+		if err := sm.sendRelayFrame(msg.Recipient, Frame{
+			Type:    "msg",
+			Message: &msg,
+		}); err != nil {
+			log.Printf("sync: drainOutbox: failed to relay message %s: %v", msg.ID[:8], err)
+		}
+	}
 }

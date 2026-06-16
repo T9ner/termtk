@@ -6,10 +6,35 @@ import "encoding/json"
 // Both the relay server (cmd/termtalk-relay) and the client sync manager
 // (internal/network/sync.go) use this shared type to encode/decode
 // relay protocol messages.
+//
+// Frame types:
+//   - "register"       — client→relay: register with UUID and username
+//   - "registered"     — relay→client: registration acknowledgement
+//   - "relay"          — client→relay: route a message to a recipient
+//   - "msg"            — relay→client: incoming message from another peer
+//   - "offline"        — relay→client: recipient is not connected
+//   - "ping"/"pong"    — keepalive heartbeat
+//   - "search"         — client→relay: search for users by username query
+//   - "search_result"  — relay→client: list of matching users
+//   - "who_online"     — client→relay: request list of online users
+//   - "online_list"    — relay→client: list of online users
+//   - "stored"         — relay→client: message was stored for offline recipient
+//   - "delivered"      — relay→client: stored message was delivered to recipient
+//   - "flush"          — relay→client: delivering stored messages on reconnect
 type RelayFrame struct {
-	Type      string          `json:"type"`                // "register", "relay", "msg", "offline", "ping"
-	UUID      string          `json:"uuid,omitempty"`      // Client registration UUID
-	Username  string          `json:"username,omitempty"`  // Client registration Username
-	Recipient string          `json:"recipient,omitempty"` // Target Recipient UUID
-	Message   json.RawMessage `json:"message,omitempty"`   // Nested Frame payload
+	Type      string          `json:"type"`                 // Frame type identifier
+	UUID      string          `json:"uuid,omitempty"`       // Client registration UUID
+	Username  string          `json:"username,omitempty"`   // Client registration Username
+	Recipient string          `json:"recipient,omitempty"`  // Target Recipient UUID
+	Message   json.RawMessage `json:"message,omitempty"`    // Nested Frame payload
+	Query     string          `json:"query,omitempty"`      // Search query string
+	Users     []UserInfo      `json:"users,omitempty"`      // Search/online results
+	MessageID string          `json:"message_id,omitempty"` // For stored/delivered acks
+}
+
+// UserInfo represents a user in search/online results.
+type UserInfo struct {
+	UUID     string `json:"uuid"`
+	Username string `json:"username"`
+	Online   bool   `json:"online"`
 }

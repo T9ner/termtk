@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -326,6 +327,7 @@ func TestView_AllStates_NoPanic(t *testing.T) {
 		StateExport,
 		StateImport,
 		StateAddContact,
+		StateSearch,
 	}
 
 	for _, state := range states {
@@ -518,4 +520,100 @@ func TestUpdate_Dashboard_FocusSidebar_Enter_SelectsAndSwitches(t *testing.T) {
 	if um.Focus != FocusChat {
 		t.Errorf("expected FocusChat after Enter in sidebar, got %d", um.Focus)
 	}
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Test 21: Ctrl+F from Dashboard transitions to StateSearch
+// ────────────────────────────────────────────────────────────────────
+
+func TestCtrlFTransitionsToSearch(t *testing.T) {
+	m, cleanup := newTestModel(t)
+	defer cleanup()
+
+	m.State = StateDashboard
+	m.Focus = FocusSidebar
+
+	msg := tea.KeyMsg{Type: tea.KeyCtrlF}
+	updated, _ := m.Update(msg)
+	um := updated.(Model)
+
+	if um.State != StateSearch {
+		t.Errorf("expected StateSearch (%d), got %d", StateSearch, um.State)
+	}
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Test 22: Esc from StateSearch returns to Dashboard
+// ────────────────────────────────────────────────────────────────────
+
+func TestEscFromSearchReturnsToDashboard(t *testing.T) {
+	m, cleanup := newTestModel(t)
+	defer cleanup()
+
+	m.State = StateSearch
+
+	msg := tea.KeyMsg{Type: tea.KeyEsc}
+	updated, _ := m.Update(msg)
+	um := updated.(Model)
+
+	if um.State != StateDashboard {
+		t.Errorf("expected StateDashboard (%d), got %d", StateDashboard, um.State)
+	}
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Test 23: viewSearch() renders without panic on empty results
+// ────────────────────────────────────────────────────────────────────
+
+func TestSearchViewRendersWithoutPanic(t *testing.T) {
+	m, cleanup := newTestModel(t)
+	defer cleanup()
+
+	m.State = StateSearch
+	m.SearchResults = nil
+
+	output := m.View()
+	if output == "" {
+		t.Error("expected non-empty View output for StateSearch with no results")
+	}
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Test 24: viewSearch() with results shows usernames and badges
+// ────────────────────────────────────────────────────────────────────
+
+func TestSearchViewRendersResults(t *testing.T) {
+	m, cleanup := newTestModel(t)
+	defer cleanup()
+
+	m.State = StateSearch
+	m.SearchResults = []SearchResult{
+		{UUID: "uuid-1", Username: "alice", Online: true},
+		{UUID: "uuid-2", Username: "chioma", Online: false},
+		{UUID: "uuid-3", Username: "amara", Online: true},
+	}
+	m.SearchSelectedIdx = 0
+
+	output := m.View()
+
+	// Should contain usernames
+	if !containsStr(output, "alice") {
+		t.Error("expected output to contain 'alice'")
+	}
+	if !containsStr(output, "chioma") {
+		t.Error("expected output to contain 'chioma'")
+	}
+	if !containsStr(output, "amara") {
+		t.Error("expected output to contain 'amara'")
+	}
+
+	// Should contain the title
+	if !containsStr(output, "Find Users on Relay") {
+		t.Error("expected output to contain 'Find Users on Relay'")
+	}
+}
+
+// containsStr is a test helper to check substring membership.
+func containsStr(s, substr string) bool {
+	return strings.Contains(s, substr)
 }

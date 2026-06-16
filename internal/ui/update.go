@@ -78,8 +78,12 @@ func (m *Model) ReloadMessages() {
 					statusStr = " [Draft]"
 				case string(db.StatusQueued):
 					statusStr = " [Queued]"
+				case string(db.StatusStored):
+					statusStr = " [☁ Stored]"
 				case string(db.StatusSynced):
 					statusStr = " [✓]"
+				case string(db.StatusAck):
+					statusStr = " [✓✓]"
 				}
 				line = fmt.Sprintf("[%s] You: %s%s", timestamp, msg.Content, statusStr)
 			} else {
@@ -190,6 +194,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.State = StateAddContact
 				m.AddContactInput.SetValue("")
 				m.AddContactInput.Focus()
+
+			case tea.KeyCtrlF:
+				m.State = StateSearch
+				m.SearchInput.SetValue("")
+				m.SearchInput.Focus()
+				m.SearchResults = nil
+				m.SearchSelectedIdx = 0
 
 			case tea.KeyUp:
 				if m.Focus == FocusSidebar {
@@ -327,6 +338,60 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.SetStatus("Format must be username:uuid", 3*time.Second)
 				}
 			}
+
+		case StateSearch:
+			switch msg.Type {
+			case tea.KeyEsc:
+				m.State = StateDashboard
+				if m.Focus == FocusChat {
+					m.MsgInput.Focus()
+				}
+				return m, nil
+
+			case tea.KeyUp:
+				if m.SearchSelectedIdx > 0 {
+					m.SearchSelectedIdx--
+				}
+
+			case tea.KeyDown:
+				if m.SearchSelectedIdx < len(m.SearchResults)-1 {
+					m.SearchSelectedIdx++
+				}
+
+			case tea.KeyEnter:
+				if len(m.SearchResults) > 0 && m.SearchSelectedIdx >= 0 && m.SearchSelectedIdx < len(m.SearchResults) {
+					// Select and add the highlighted result
+					result := m.SearchResults[m.SearchSelectedIdx]
+					err := m.Client.AddContact(result.Username, result.UUID)
+					if err != nil {
+						m.SetStatus(fmt.Sprintf("Failed to add contact: %v", err), 3*time.Second)
+					} else {
+						m.SetStatus(fmt.Sprintf("Added contact %s", result.Username), 3*time.Second)
+						m.RefreshContacts()
+					}
+					m.State = StateDashboard
+					if m.Focus == FocusChat {
+						m.MsgInput.Focus()
+					}
+				} else {
+					// No results yet — send the search query
+					query := strings.TrimSpace(m.SearchInput.Value())
+					if err := m.Client.SearchUsers(query); err != nil {
+						m.SetStatus(fmt.Sprintf("Search failed: %v", err), 3*time.Second)
+					}
+				}
+
+			default:
+				var cmd tea.Cmd
+				m.SearchInput, cmd = m.SearchInput.Update(msg)
+				cmds = append(cmds, cmd)
+
+				// Live search: send query to relay on every keystroke
+				query := strings.TrimSpace(m.SearchInput.Value())
+				if query != "" {
+					_ = m.Client.SearchUsers(query)
+				}
+			}
 		}
 
 	case client.PeerDiscoveredEvent:
@@ -342,6 +407,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case client.MessageReceivedEvent:
 		m.ReloadMessages()
+		// Re-trigger listener
+		cmds = append(cmds, m.ListenForEvents())
+
+	case client.SearchResultEvent:
+		// Convert protocol.UserInfo to local SearchResult
+		results := make([]SearchResult, len(msg.Users))
+		for i, u := range msg.Users {
+			results[i] = SearchResult{UUID: u.UUID, Username: u.Username, Online: u.Online}
+		}
+		m.SearchResults = results
+		m.SearchSelectedIdx = 0
+		// Re-trigger listener
+		cmds = append(cmds, m.ListenForEvents())
+
+	case client.OnlineListEvent:
+		// Can be used to refresh online status of contacts
 		// Re-trigger listener
 		cmds = append(cmds, m.ListenForEvents())
 	}
