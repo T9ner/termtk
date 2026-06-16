@@ -9,9 +9,9 @@ Package `ui` implements the terminal user interface using [Bubble Tea](https://g
 
 ## Ownership
 
-- [model.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/model.go): `Model` struct, `NewModel()`, `Init()` — state initialization, text inputs, `FocusMode` type and `AppState` constants
+- [model.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/model.go): `Model` struct, `NewModel()`, `Init()` — state initialization, text inputs, `FocusMode` type, `AppState` constants, `SearchResult` local type
 - [update.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/update.go): `Update()` — Elm Architecture message loop, keyboard handling, shortcut commands, focus-aware input routing
-- [view.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/view.go): `View()` — Lipgloss layouts, color palette, dashboard, profile, chat, and empty-state renderers
+- [view.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/view.go): `View()` — Lipgloss layouts, color palette, dashboard, profile, chat, search, and empty-state renderers
 
 ## Local Contracts
 
@@ -39,20 +39,21 @@ The dashboard uses a `FocusMode` enum (`FocusSidebar` / `FocusChat`) to control 
 | `StateExport` | Export sync file path prompt | Esc → Dashboard |
 | `StateImport` | Import sync file path prompt | Esc → Dashboard |
 | `StateAddContact` | Manual contact entry | Esc → Dashboard |
+| `StateSearch` | Relay user search with results list | Esc → Dashboard |
 
 ## Context-Aware Footer
 
 The footer changes shortcut hints based on the current state and focus:
 
-- **FocusSidebar**: `↑↓: Navigate | Enter: Open Chat | Tab: Switch to Chat | Ctrl+N: Add Peer | Ctrl+P: Profile | Ctrl+Q: Quit`
-- **FocusChat**: `↑↓: Scroll | Enter: Send | Tab: Switch to Contacts | Ctrl+E: Export | Ctrl+O: Import | Ctrl+Q: Quit`
+- **FocusSidebar**: `↑↓: Navigate | Enter: Open Chat | Tab: Switch to Chat | Ctrl+N: Add Peer | Ctrl+F: Find Users | Ctrl+P: Profile | Ctrl+Q: Quit`
+- **FocusChat**: `↑↓: Scroll | Enter: Send | Tab: Switch to Contacts | Ctrl+E: Export | Ctrl+O: Import | Ctrl+F: Find Users | Ctrl+Q: Quit`
 - **Other states**: `Enter: Confirm | Esc: Cancel` (or state-specific hints)
 
 ## Work Guidance
 
 - `Update()` uses value receivers per Bubble Tea convention — the entire Model is copied on every update. Be mindful of allocation pressure with large slices
 - Viewport height calculations must subtract headers and borders dynamically. See [CE-002](file:///C:/Users/HP/Desktop/termtk/docs/ce_lessons.md) for past layout bugs
-- [update_test.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/update_test.go) covers `Update()` and `View()` — key handling, state transitions, event processing, window resize, focus toggling, and render-without-panic for all states
+- [update_test.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/update_test.go) covers `Update()` and `View()` — key handling, state transitions, event processing, window resize, focus toggling, search UI, and render-without-panic for all states
 
 ## Verification
 

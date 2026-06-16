@@ -12,7 +12,8 @@ The `cmd/` directory contains the `main` packages for TermTalk's two binaries:
 ## Ownership
 
 - [termtalk/main.go](file:///C:/Users/HP/Desktop/termtk/cmd/termtalk/main.go): Client entry point — wires SQLite DB, UDP discovery, TCP sync, and launches the Bubble Tea TUI
-- [termtalk-relay/main.go](file:///C:/Users/HP/Desktop/termtk/cmd/termtalk-relay/main.go): Relay server — accepts client registrations, routes messages between peers, handles heartbeat keepalive
+- [termtalk-relay/main.go](file:///C:/Users/HP/Desktop/termtk/cmd/termtalk-relay/main.go): Relay server — `RelayServer` struct manages client registrations, message routing, store-and-forward for offline recipients, user registry, search, who_online presence, and heartbeat keepalive
+- [termtalk-relay/relay_store_test.go](file:///C:/Users/HP/Desktop/termtk/cmd/termtalk-relay/relay_store_test.go): Tests for store-and-forward, flush-on-reconnect, delivery receipts, search, online status, and empty-query behavior (8 tests)
 
 ## Local Contracts
 

@@ -8,6 +8,7 @@ import (
 
 	"termtalk/internal/db"
 	"termtalk/internal/network"
+	"termtalk/internal/protocol"
 )
 
 // Event is a domain event emitted by the Client and consumed by the TUI.
@@ -22,6 +23,16 @@ func (PeerDiscoveredEvent) isEvent() {}
 type MessageReceivedEvent struct{ Message *db.Message }
 
 func (MessageReceivedEvent) isEvent() {}
+
+// SearchResultEvent is fired when search results arrive from the relay.
+type SearchResultEvent struct{ Users []protocol.UserInfo }
+
+func (SearchResultEvent) isEvent() {}
+
+// OnlineListEvent is fired when the online user list arrives from the relay.
+type OnlineListEvent struct{ Users []protocol.UserInfo }
+
+func (OnlineListEvent) isEvent() {}
 
 // Client is the unified coordinator for the TermTalk application.
 // It encapsulates the Database, PeerDiscovery daemon, and SyncManager
@@ -65,6 +76,12 @@ func New(dbPath string, tcpPort int) (*Client, error) {
 	}
 	c.syncMgr.OnMsgRecv = func(msg *db.Message) {
 		c.events <- MessageReceivedEvent{Message: msg}
+	}
+	c.syncMgr.OnSearchResult = func(users []protocol.UserInfo) {
+		c.events <- SearchResultEvent{Users: users}
+	}
+	c.syncMgr.OnOnlineList = func(users []protocol.UserInfo) {
+		c.events <- OnlineListEvent{Users: users}
 	}
 
 	return c, nil
@@ -232,4 +249,16 @@ func (c *Client) IsPeerOnline(peerUUID string) bool {
 // ConnectToPeer dials a discovered Peer over TCP and performs history sync.
 func (c *Client) ConnectToPeer(ctx context.Context, contact *db.Contact) error {
 	return c.syncMgr.ConnectToPeer(ctx, contact)
+}
+
+// SearchUsers sends a search query to the relay server.
+// Results arrive asynchronously as a SearchResultEvent on the Events channel.
+func (c *Client) SearchUsers(query string) error {
+	return c.syncMgr.SendSearchRequest(query)
+}
+
+// GetOnlineUsers requests the list of currently online users from the relay.
+// Results arrive asynchronously as an OnlineListEvent on the Events channel.
+func (c *Client) GetOnlineUsers() error {
+	return c.syncMgr.SendWhoOnline()
 }

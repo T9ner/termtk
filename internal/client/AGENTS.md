@@ -9,7 +9,7 @@ Package `client` provides the `Client` struct — the central Facade/Mediator th
 
 ## Ownership
 
-- [client.go](file:///C:/Users/HP/Desktop/termtk/internal/client/client.go): `Client` struct, `Event` interface, `PeerDiscoveredEvent`, `MessageReceivedEvent`, and all public methods
+- [client.go](file:///C:/Users/HP/Desktop/termtk/internal/client/client.go): `Client` struct, `Event` interface, `PeerDiscoveredEvent`, `MessageReceivedEvent`, `SearchResultEvent`, `OnlineListEvent`, and all public methods including `SearchUsers(query)` and `GetOnlineUsers()`
 
 ## Local Contracts
 

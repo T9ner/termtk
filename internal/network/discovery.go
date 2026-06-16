@@ -65,10 +65,14 @@ func (p *PeerDiscovery) Start(_ context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	// 1. Start listener
+	// 1. Start listener (non-fatal if port is already in use by another instance)
 	listenerConn, err := net.ListenPacket("udp4", fmt.Sprintf("0.0.0.0:%d", DiscoveryPort))
 	if err != nil {
-		return fmt.Errorf("failed to bind UDP discovery port: %w", err)
+		log.Printf("discovery: UDP port %d already in use (another instance?), skipping listener: %v", DiscoveryPort, err)
+		// Still run announce loop so we broadcast our presence
+		p.wg.Add(1)
+		go p.announceLoop()
+		return nil
 	}
 
 	p.wg.Add(2)

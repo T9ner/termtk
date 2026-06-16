@@ -271,3 +271,31 @@ func (d *Database) GetUnsyncedMessages(contactUUID string) ([]Message, error) {
 	}
 	return unsynced, nil
 }
+
+// GetQueuedMessages retrieves all outgoing messages from the local user that
+// are still in 'queued' status, for relay outbox drain on reconnect.
+func (d *Database) GetQueuedMessages(senderUUID string) ([]Message, error) {
+	rows, err := d.conn.Query(
+		`SELECT id, sender_uuid, recipient_uuid, content, timestamp, status 
+		 FROM messages 
+		 WHERE sender_uuid = ? AND status = 'queued'
+		 ORDER BY timestamp ASC`,
+		senderUUID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var queued []Message
+	for rows.Next() {
+		var m Message
+		var ts time.Time
+		if err := rows.Scan(&m.ID, &m.Sender, &m.Recipient, &m.Content, &ts, &m.Status); err != nil {
+			return nil, err
+		}
+		m.Timestamp = ts
+		queued = append(queued, m)
+	}
+	return queued, nil
+}

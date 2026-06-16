@@ -100,6 +100,8 @@ func (m Model) View() string {
 		return m.viewImport()
 	case StateAddContact:
 		return m.viewAddContact()
+	case StateSearch:
+		return m.viewSearch()
 	default:
 		return "Unknown app state."
 	}
@@ -271,11 +273,11 @@ func (m Model) viewDashboard() string {
 	var chatBuilder strings.Builder
 	if m.SelectedIdx >= 0 && m.SelectedIdx < len(m.Contacts) {
 		contact := m.Contacts[m.SelectedIdx]
-		onlineStatus := offlineBadge.Render("offline")
+		statusText := "offline"
 		if m.Client.IsPeerOnline(contact.UUID) {
-			onlineStatus = onlineBadge.Render("online")
+			statusText = "online"
 		}
-		chatHeaderText := fmt.Sprintf("Chatting with %s (%s)", contact.Username, onlineStatus)
+		chatHeaderText := fmt.Sprintf("Chatting with %s (%s)", contact.Username, statusText)
 		if m.Focus == FocusChat {
 			chatBuilder.WriteString(chatHeaderActiveStyle.Render(chatHeaderText) + "\n\n")
 		} else {
@@ -333,9 +335,9 @@ func (m Model) viewDashboard() string {
 // dashboardFooter returns context-aware shortcut hints based on focus mode.
 func (m Model) dashboardFooter() string {
 	if m.Focus == FocusSidebar {
-		return "↑↓: Navigate | Enter: Open Chat | Tab: Switch to Chat | Ctrl+N: Add Peer | Ctrl+P: Profile | Ctrl+Q: Quit"
+		return "↑↓: Navigate | Enter: Open Chat | Tab: Switch to Chat | Ctrl+N: Add Peer | Ctrl+F: Find Users | Ctrl+P: Profile | Ctrl+Q: Quit"
 	}
-	return "↑↓: Scroll | Enter: Send | Tab: Switch to Contacts | Ctrl+E: Export | Ctrl+O: Import | Ctrl+Q: Quit"
+	return "↑↓: Scroll | Enter: Send | Tab: Switch to Contacts | Ctrl+E: Export | Ctrl+O: Import | Ctrl+F: Find Users | Ctrl+Q: Quit"
 }
 
 func (m Model) viewExport() string {
@@ -377,5 +379,71 @@ func (m Model) viewAddContact() string {
 	sb.WriteString(m.AddContactInput.View())
 	sb.WriteString("\n\n")
 	sb.WriteString(footerStyle.Render("Enter: Confirm | Esc: Cancel"))
+	return sb.String()
+}
+
+func (m Model) viewSearch() string {
+	var sb strings.Builder
+	sb.WriteString("\n")
+	sb.WriteString(titleStyle.Render(" Find Users on Relay "))
+	sb.WriteString("\n\n")
+	sb.WriteString(" Search: " + m.SearchInput.View())
+	sb.WriteString("\n\n")
+
+	// Separate online and offline results, online first
+	var online, offline []SearchResult
+	for _, r := range m.SearchResults {
+		if r.Online {
+			online = append(online, r)
+		} else {
+			offline = append(offline, r)
+		}
+	}
+	sorted := append(online, offline...)
+
+	if len(sorted) == 0 {
+		sb.WriteString(lipgloss.NewStyle().Foreground(grayColor).Italic(true).Render(" No results.") + "\n")
+	} else {
+		sb.WriteString(" Results:\n")
+		sb.WriteString(" " + strings.Repeat("─", 34) + "\n")
+
+		for i, r := range sorted {
+			var badge string
+			if r.Online {
+				badge = onlineBadge.Render("[ON ]")
+			} else {
+				badge = offlineBadge.Render("[OFF]")
+			}
+
+			username := r.Username
+			if len(username) > 14 {
+				username = username[:11] + "..."
+			}
+
+			line := fmt.Sprintf("  %s %-14s", badge, username)
+			if i == 0 {
+				line += "  Press Enter to add"
+			}
+
+			// Find original index for selection highlighting
+			origIdx := -1
+			for j, orig := range m.SearchResults {
+				if orig.UUID == r.UUID {
+					origIdx = j
+					break
+				}
+			}
+
+			if origIdx == m.SearchSelectedIdx {
+				sb.WriteString(selectedStyle.Render(line) + "\n")
+			} else {
+				sb.WriteString(normalContactStyle.Render(line) + "\n")
+			}
+		}
+		sb.WriteString(" " + strings.Repeat("─", 34) + "\n")
+	}
+
+	sb.WriteString("\n")
+	sb.WriteString(footerStyle.Render("↑↓: Navigate | Enter: Add Contact | Esc: Cancel"))
 	return sb.String()
 }
