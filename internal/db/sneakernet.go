@@ -53,7 +53,7 @@ func (d *Database) ExportSyncFile(contactUUID string, localProfile *Profile, exp
 	defer tx.Rollback()
 
 	for _, m := range unsynced {
-		_, err := tx.Exec("UPDATE messages SET status = ? WHERE id = ?", "synced", m.ID)
+		_, err := tx.Exec("UPDATE messages SET status = ? WHERE id = ?", string(StatusSynced), m.ID)
 		if err != nil {
 			return fmt.Errorf("failed to update message status after export: %w", err)
 		}
@@ -107,7 +107,7 @@ func (d *Database) ImportSyncFile(importPath string) (*SyncFile, error) {
 		}
 
 		// Save/merge into the local database (upsert checks for duplicates)
-		msg.Status = "synced"
+		msg.Status = string(StatusSynced)
 		if err := d.saveMessageTx(tx, msg); err != nil {
 			return nil, fmt.Errorf("failed to save message %s during import: %w", msg.ID, err)
 		}

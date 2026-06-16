@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -44,7 +45,7 @@ func main() {
 
 	if profile != nil {
 		// Start networking if profile exists
-		if err := c.Start(); err != nil {
+		if err := c.Start(context.Background()); err != nil {
 			log.Printf("Warning: failed to start client networking: %v", err)
 		}
 	}

@@ -1,6 +1,7 @@
 package network
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -32,7 +33,7 @@ func createTempDB(t *testing.T, name string) (*db.Database, func()) {
 }
 
 func TestSyncManagerP2P(t *testing.T) {
-	// 1. Create DB and SyncManager for Alice
+	// 1. Create DB and SyncManager for Alice (port 0 = OS-assigned)
 	aliceDB, aliceCleanup := createTempDB(t, "alice")
 	defer aliceCleanup()
 
@@ -42,14 +43,19 @@ func TestSyncManagerP2P(t *testing.T) {
 		t.Fatalf("failed to save alice profile: %v", err)
 	}
 
-	aliceSync := NewSyncManager(aliceProfile.UUID, aliceProfile.Username, 55561, aliceDB)
-	err = aliceSync.Start()
+	aliceSync := NewSyncManager(aliceProfile.UUID, aliceProfile.Username, 0, aliceDB)
+	err = aliceSync.Start(context.Background())
 	if err != nil {
 		t.Fatalf("failed to start alice sync manager: %v", err)
 	}
 	defer aliceSync.Stop()
 
-	// 2. Create DB and SyncManager for Bob
+	alicePort := aliceSync.ListenerPort()
+	if alicePort == 0 {
+		t.Fatal("alice listener port should not be 0 after Start")
+	}
+
+	// 2. Create DB and SyncManager for Bob (port 0 = OS-assigned)
 	bobDB, bobCleanup := createTempDB(t, "bob")
 	defer bobCleanup()
 
@@ -59,19 +65,24 @@ func TestSyncManagerP2P(t *testing.T) {
 		t.Fatalf("failed to save bob profile: %v", err)
 	}
 
-	bobSync := NewSyncManager(bobProfile.UUID, bobProfile.Username, 55562, bobDB)
-	err = bobSync.Start()
+	bobSync := NewSyncManager(bobProfile.UUID, bobProfile.Username, 0, bobDB)
+	err = bobSync.Start(context.Background())
 	if err != nil {
 		t.Fatalf("failed to start bob sync manager: %v", err)
 	}
 	defer bobSync.Stop()
 
-	// Register Bob in Alice's contact list so she knows how to dial him
+	bobPort := bobSync.ListenerPort()
+	if bobPort == 0 {
+		t.Fatal("bob listener port should not be 0 after Start")
+	}
+
+	// Register Bob in Alice's contact list using Bob's actual port
 	bobContactForAlice := &db.Contact{
 		UUID:     bobProfile.UUID,
 		Username: bobProfile.Username,
 		IP:       "127.0.0.1",
-		Port:     55562,
+		Port:     bobPort,
 		LastSeen: time.Now(),
 	}
 	err = aliceDB.UpsertContact(bobContactForAlice)
@@ -79,12 +90,12 @@ func TestSyncManagerP2P(t *testing.T) {
 		t.Fatalf("failed to register bob in alice's contact list: %v", err)
 	}
 
-	// Register Alice in Bob's contact list so he knows her
+	// Register Alice in Bob's contact list using Alice's actual port
 	aliceContactForBob := &db.Contact{
 		UUID:     aliceProfile.UUID,
 		Username: aliceProfile.Username,
 		IP:       "127.0.0.1",
-		Port:     55561,
+		Port:     alicePort,
 		LastSeen: time.Now(),
 	}
 	err = bobDB.UpsertContact(aliceContactForBob)
@@ -99,7 +110,7 @@ func TestSyncManagerP2P(t *testing.T) {
 	}
 
 	// 3. Connect Alice to Bob
-	err = aliceSync.ConnectToPeer(bobContactForAlice)
+	err = aliceSync.ConnectToPeer(context.Background(), bobContactForAlice)
 	if err != nil {
 		t.Fatalf("failed to connect alice to bob: %v", err)
 	}

@@ -31,6 +31,16 @@ type Contact struct {
 	LastSeen time.Time `json:"last_seen"`
 }
 
+// MessageStatus represents the lifecycle state of a Message.
+type MessageStatus string
+
+const (
+	StatusDraft  MessageStatus = "draft"
+	StatusQueued MessageStatus = "queued"
+	StatusSynced MessageStatus = "synced"
+	StatusAck    MessageStatus = "ack"
+)
+
 // Message represents a direct message between the local user and a contact.
 type Message struct {
 	ID        string    `json:"id"` // Unique SHA-256 hash of Content + Sender + Recipient + Timestamp
@@ -38,7 +48,7 @@ type Message struct {
 	Recipient string    `json:"recipient_uuid"`
 	Content   string    `json:"content"`
 	Timestamp time.Time `json:"timestamp"`
-	Status    string    `json:"status"` // "draft", "queued", "synced"
+	Status    string    `json:"status"` // MessageStatus: draft, queued, synced, ack
 }
 
 // GenerateID computes the unique SHA-256 hash for a message to prevent duplicates and ensure integrity.

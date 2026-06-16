@@ -1,6 +1,7 @@
 package network
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"termtalk/internal/db"
+	"termtalk/internal/protocol"
 )
 
 // Frame represents a protocol packet exchanged over TCP.
@@ -19,15 +21,6 @@ type Frame struct {
 	Username string      `json:"username,omitempty"` // Sender Username for handshakes
 	Hashes   []string    `json:"hashes,omitempty"`   // List of message IDs for history sync
 	Message  *db.Message `json:"message,omitempty"`  // Single message object
-}
-
-// RelayFrame represents the message wrapper used by the relay server.
-type RelayFrame struct {
-	Type      string          `json:"type"`                // "register", "relay", "msg", "offline", "ping"
-	UUID      string          `json:"uuid,omitempty"`      // Client registration UUID
-	Username  string          `json:"username,omitempty"`  // Client registration Username
-	Recipient string          `json:"recipient,omitempty"` // Target Recipient UUID
-	Message   json.RawMessage `json:"message,omitempty"`   // Nested Frame payload
 }
 
 // PeerConnection wraps an active TCP connection to a peer.
@@ -71,6 +64,7 @@ type SyncManager struct {
 	activeConn map[string]*PeerConnection // Keyed by Peer UUID
 	mu         sync.Mutex
 	stopChan   chan struct{}
+	stopOnce   sync.Once
 	wg         sync.WaitGroup
 	OnMsgRecv  func(msg *db.Message)
 	OnPeerSync func(peerUUID string)
@@ -130,7 +124,7 @@ func (sm *SyncManager) getUsername() string {
 }
 
 // Start starts the TCP server listening for incoming connections and the relay connection loop.
-func (sm *SyncManager) Start() error {
+func (sm *SyncManager) Start(ctx context.Context) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -144,42 +138,37 @@ func (sm *SyncManager) Start() error {
 	}
 
 	sm.wg.Add(1)
-	go sm.relayLoop()
+	go sm.relayLoop(ctx)
 
 	return nil
 }
 
 // Stop closes the TCP listener and all active connections.
 func (sm *SyncManager) Stop() {
-	sm.mu.Lock()
-	// Protect stop channel closure
-	select {
-	case <-sm.stopChan:
-		sm.mu.Unlock()
-		return
-	default:
+	sm.stopOnce.Do(func() {
 		close(sm.stopChan)
-	}
-	if sm.listener != nil {
-		sm.listener.Close()
-	}
 
-	for _, pc := range sm.activeConn {
-		pc.Close()
-	}
-	sm.mu.Unlock()
+		sm.mu.Lock()
+		if sm.listener != nil {
+			sm.listener.Close()
+		}
+		for _, pc := range sm.activeConn {
+			pc.Close()
+		}
+		sm.mu.Unlock()
 
-	sm.relayMu.Lock()
-	if sm.relayConn != nil {
-		sm.relayConn.Close()
-	}
-	sm.relayMu.Unlock()
+		sm.relayMu.Lock()
+		if sm.relayConn != nil {
+			sm.relayConn.Close()
+		}
+		sm.relayMu.Unlock()
+	})
 
 	sm.wg.Wait()
 }
 
 // ConnectToPeer initiates a TCP connection to a peer, performs the handshake, and syncs history.
-func (sm *SyncManager) ConnectToPeer(c *db.Contact) error {
+func (sm *SyncManager) ConnectToPeer(ctx context.Context, c *db.Contact) error {
 	sm.mu.Lock()
 	if _, active := sm.activeConn[c.UUID]; active {
 		sm.mu.Unlock()
@@ -187,13 +176,21 @@ func (sm *SyncManager) ConnectToPeer(c *db.Contact) error {
 	}
 	sm.mu.Unlock()
 
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", c.IP, c.Port), 3*time.Second)
+	// Use context with a 3-second dial timeout
+	dialCtx, dialCancel := context.WithTimeout(ctx, 3*time.Second)
+	defer dialCancel()
+	var d net.Dialer
+	conn, err := d.DialContext(dialCtx, "tcp", fmt.Sprintf("%s:%d", c.IP, c.Port))
 	if err != nil {
 		return err
 	}
 
-	// Set short deadline for handshake setup
-	conn.SetDeadline(time.Now().Add(5 * time.Second))
+	// Set handshake deadline from context, fallback to 5-second deadline
+	handshakeCtx, hsCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer hsCancel()
+	if deadline, ok := handshakeCtx.Deadline(); ok {
+		conn.SetDeadline(deadline)
+	}
 
 	pc := NewPeerConnection(conn)
 
@@ -247,7 +244,7 @@ func (sm *SyncManager) SendMessage(peerUUID string, content string) error {
 		Recipient: peerUUID,
 		Content:   content,
 		Timestamp: time.Now(),
-		Status:    "queued",
+		Status:    string(db.StatusQueued),
 	}
 	msg.ID = msg.GenerateID()
 
@@ -268,8 +265,10 @@ func (sm *SyncManager) SendMessage(peerUUID string, content string) error {
 			})
 			if err == nil {
 				// Mark as synced locally
-				_ = sm.db.UpdateMessageStatus(msg.ID, "synced")
-				msg.Status = "synced"
+				if err := sm.db.UpdateMessageStatus(msg.ID, string(db.StatusSynced)); err != nil {
+					log.Printf("sync: failed to update message status to synced: %v", err)
+				}
+				msg.Status = string(db.StatusSynced)
 				if sm.OnMsgRecv != nil {
 					sm.OnMsgRecv(msg)
 				}
@@ -308,10 +307,12 @@ func (sm *SyncManager) SyncHistory(pc *PeerConnection) {
 	}
 
 	// Send list of hashes we have
-	_ = pc.Send(Frame{
+	if err := pc.Send(Frame{
 		Type:   "sync_list",
 		Hashes: hashes,
-	})
+	}); err != nil {
+		log.Printf("sync: failed to send sync_list: %v", err)
+	}
 }
 
 // sendRelayFrame encapsulates and sends a Frame to the relay server.
@@ -330,7 +331,7 @@ func (sm *SyncManager) sendRelayFrame(recipientUUID string, f Frame) error {
 		return err
 	}
 
-	return enc.Encode(RelayFrame{
+	return enc.Encode(protocol.RelayFrame{
 		Type:      "relay",
 		Recipient: recipientUUID,
 		Message:   payload,
@@ -420,9 +421,17 @@ func (sm *SyncManager) handleConnection(pc *PeerConnection) {
 
 		switch frame.Type {
 		case "sync_list":
-			sm.handleSyncList(pc.UUID, frame.Hashes, func(f Frame) { _ = pc.Send(f) })
+			sm.handleSyncList(pc.UUID, frame.Hashes, func(f Frame) {
+				if err := pc.Send(f); err != nil {
+					log.Printf("sync: failed to send frame to peer %s: %v", pc.UUID, err)
+				}
+			})
 		case "sync_request":
-			sm.handleSyncRequest(pc.UUID, frame.Hashes, func(f Frame) { _ = pc.Send(f) })
+			sm.handleSyncRequest(pc.UUID, frame.Hashes, func(f Frame) {
+				if err := pc.Send(f); err != nil {
+					log.Printf("sync: failed to send frame to peer %s: %v", pc.UUID, err)
+				}
+			})
 		case "msg":
 			sm.handleIncomingMessage(pc.UUID, frame.Message)
 		}
@@ -464,7 +473,7 @@ func (sm *SyncManager) handleSyncList(peerUUID string, peerHashes []string, send
 	}
 
 	for _, m := range history {
-		if !peerHashesMap[m.ID] && m.Status == "synced" {
+		if !peerHashesMap[m.ID] && m.Status == string(db.StatusSynced) {
 			sendFunc(Frame{
 				Type:    "msg",
 				Message: &m,
@@ -501,9 +510,11 @@ func (sm *SyncManager) handleIncomingMessage(peerUUID string, m *db.Message) {
 	}
 
 	// If it is a delivery ACK, complete the message status sync
-	if m.Status == "ack" {
-		_ = sm.db.UpdateMessageStatus(m.Content, "synced")
-		m.Status = "synced"
+	if m.Status == string(db.StatusAck) {
+		if err := sm.db.UpdateMessageStatus(m.Content, string(db.StatusSynced)); err != nil {
+			log.Printf("sync: failed to update ack'd message status: %v", err)
+		}
+		m.Status = string(db.StatusSynced)
 		if sm.OnMsgRecv != nil {
 			sm.OnMsgRecv(m)
 		}
@@ -515,7 +526,7 @@ func (sm *SyncManager) handleIncomingMessage(peerUUID string, m *db.Message) {
 		return
 	}
 
-	m.Status = "synced"
+	m.Status = string(db.StatusSynced)
 	if err := sm.db.SaveMessage(m); err != nil {
 		return
 	}
@@ -532,7 +543,7 @@ func (sm *SyncManager) handleIncomingMessage(peerUUID string, m *db.Message) {
 			Recipient: peerUUID,
 			Content:   m.ID,
 			Timestamp: time.Now(),
-			Status:    "ack",
+			Status:    string(db.StatusAck),
 		}
 		ackMsg.ID = ackMsg.GenerateID()
 
@@ -541,26 +552,32 @@ func (sm *SyncManager) handleIncomingMessage(peerUUID string, m *db.Message) {
 		sm.mu.Unlock()
 
 		if localOnline {
-			_ = pc.Send(Frame{
+			if err := pc.Send(Frame{
 				Type:    "msg",
 				Message: ackMsg,
-			})
+			}); err != nil {
+				log.Printf("sync: failed to send ACK to peer %s: %v", peerUUID, err)
+			}
 		} else {
-			_ = sm.sendRelayFrame(peerUUID, Frame{
+			if err := sm.sendRelayFrame(peerUUID, Frame{
 				Type:    "msg",
 				Message: ackMsg,
-			})
+			}); err != nil {
+				log.Printf("sync: failed to send ACK via relay to peer %s: %v", peerUUID, err)
+			}
 		}
 	}
 }
 
 // relayLoop connects to and processes incoming frames from the relay server.
-func (sm *SyncManager) relayLoop() {
+func (sm *SyncManager) relayLoop(ctx context.Context) {
 	defer sm.wg.Done()
 
 	for {
 		select {
 		case <-sm.stopChan:
+			return
+		case <-ctx.Done():
 			return
 		default:
 			localUUID := sm.getLocalUUID()
@@ -574,7 +591,10 @@ func (sm *SyncManager) relayLoop() {
 				continue
 			}
 
-			conn, err := net.Dial("tcp", addr)
+			var d net.Dialer
+			dialCtx, dialCancel := context.WithTimeout(ctx, 10*time.Second)
+			conn, err := d.DialContext(dialCtx, "tcp", addr)
+			dialCancel()
 			if err != nil {
 				time.Sleep(5 * time.Second)
 				continue
@@ -584,7 +604,7 @@ func (sm *SyncManager) relayLoop() {
 			dec := json.NewDecoder(conn)
 
 			// Send registration
-			reg := RelayFrame{
+			reg := protocol.RelayFrame{
 				Type:     "register",
 				UUID:     localUUID,
 				Username: username,
@@ -595,7 +615,7 @@ func (sm *SyncManager) relayLoop() {
 				continue
 			}
 
-			var ack RelayFrame
+			var ack protocol.RelayFrame
 			if err := dec.Decode(&ack); err != nil || ack.Type != "registered" {
 				conn.Close()
 				time.Sleep(2 * time.Second)
@@ -634,7 +654,9 @@ func (sm *SyncManager) relayLoop() {
 						enc := sm.relayEnc
 						sm.relayMu.Unlock()
 						if enc != nil {
-							_ = enc.Encode(RelayFrame{Type: "ping"})
+							if err := enc.Encode(protocol.RelayFrame{Type: "ping"}); err != nil {
+								log.Printf("sync: failed to send relay ping: %v", err)
+							}
 						}
 					case <-pingStop:
 						return
@@ -644,7 +666,7 @@ func (sm *SyncManager) relayLoop() {
 
 			go func() {
 				for {
-					var frame RelayFrame
+					var frame protocol.RelayFrame
 					if err := dec.Decode(&frame); err != nil {
 						errChan <- err
 						closePing()
@@ -682,7 +704,9 @@ func (sm *SyncManager) relayLoop() {
 // handleRelayFrame routes received relay frames to the respective protocol handler.
 func (sm *SyncManager) handleRelayFrame(senderUUID string, inner Frame) {
 	sendFunc := func(f Frame) {
-		_ = sm.sendRelayFrame(senderUUID, f)
+		if err := sm.sendRelayFrame(senderUUID, f); err != nil {
+			log.Printf("sync: failed to send relay frame to %s: %v", senderUUID, err)
+		}
 	}
 
 	switch inner.Type {
@@ -715,10 +739,12 @@ func (sm *SyncManager) triggerRelaySyncAll() {
 			hashes[i] = m.ID
 		}
 
-		_ = sm.sendRelayFrame(c.UUID, Frame{
+		if err := sm.sendRelayFrame(c.UUID, Frame{
 			Type:   "sync_list",
 			Hashes: hashes,
-		})
+		}); err != nil {
+			log.Printf("sync: failed to send relay sync_list to %s: %v", c.UUID, err)
+		}
 	}
 }
 
@@ -735,4 +761,15 @@ func (sm *SyncManager) IsRelayOnline() bool {
 	sm.relayMu.Lock()
 	defer sm.relayMu.Unlock()
 	return sm.relayOnline
+}
+
+// ListenerPort returns the actual TCP port the listener is bound to.
+// Useful when started with port 0 (OS-assigned) in tests.
+func (sm *SyncManager) ListenerPort() int {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	if sm.listener == nil {
+		return 0
+	}
+	return sm.listener.Addr().(*net.TCPAddr).Port
 }

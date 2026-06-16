@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -130,7 +131,7 @@ func (c *Client) Register(username string) (*db.Profile, error) {
 
 // Start starts the network daemons using the already-loaded profile credentials.
 // Call this on subsequent boots (profile already exists in DB).
-func (c *Client) Start() error {
+func (c *Client) Start(ctx context.Context) error {
 	c.mu.RLock()
 	p := c.profile
 	c.mu.RUnlock()
@@ -142,10 +143,10 @@ func (c *Client) Start() error {
 	c.syncMgr.UpdateCredentials(p.UUID, p.Username)
 	c.discovery.UpdateCredentials(p.UUID, p.Username)
 
-	if err := c.syncMgr.Start(); err != nil {
+	if err := c.syncMgr.Start(ctx); err != nil {
 		return fmt.Errorf("client: TCP sync server: %w", err)
 	}
-	if err := c.discovery.Start(); err != nil {
+	if err := c.discovery.Start(ctx); err != nil {
 		c.syncMgr.Stop()
 		return fmt.Errorf("client: UDP discovery: %w", err)
 	}
@@ -229,6 +230,6 @@ func (c *Client) IsPeerOnline(peerUUID string) bool {
 }
 
 // ConnectToPeer dials a discovered Peer over TCP and performs history sync.
-func (c *Client) ConnectToPeer(contact *db.Contact) error {
-	return c.syncMgr.ConnectToPeer(contact)
+func (c *Client) ConnectToPeer(ctx context.Context, contact *db.Contact) error {
+	return c.syncMgr.ConnectToPeer(ctx, contact)
 }

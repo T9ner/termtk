@@ -1,25 +1,35 @@
-# DOX Framework - Documentation Directory Contract
+# DOX Framework — Documentation Directory Contract
 
-- This directory governs all design documents, architectural decision records (ADRs), and agent guides.
+- This directory governs all design documents, ADRs, CE lessons, and agent guides.
 - Parent: [Root AGENTS.md](file:///C:/Users/HP/Desktop/termtk/AGENTS.md)
 
-## Purpose and Scope
+## Purpose
 
-This folder holds project-wide documentation and guides for human developers and autonomous agents.
-Specifically, it indexes and structures:
-- Domain terminology, glossaries, and context maps (`CONTEXT.md`, `docs/agents/domain.md`).
-- Architectural Decision Records (`docs/adr/`).
-- Local issue tracker status schema and triage labels (`docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`).
+Project-wide documentation for human developers and AI agents — architectural decisions, domain vocabulary, compound engineering memory, and triage workflow.
 
-## Guidelines for Managing Docs
+## Ownership
 
-1. **Architecture Decisions (ADRs)**:
-   - Create new ADRs under `docs/adr/` using standard markdown format.
-   - Prior to proposing architectural shifts, consult existing ADRs to ensure compatibility or explicitly document the decision to override them.
+- [ce_lessons.md](file:///C:/Users/HP/Desktop/termtk/docs/ce_lessons.md): Compound Engineering lessons log — institutional memory for regression prevention
+- [adr/](file:///C:/Users/HP/Desktop/termtk/docs/adr): Architecture Decision Records
+- [agents/](file:///C:/Users/HP/Desktop/termtk/docs/agents): Agent-specific guides (domain vocabulary, triage labels, issue tracker schema)
 
-2. **Issue Triage & States**:
-   - Issue files and PRDs live in `.scratch/`.
-   - Update issue files with the canonical states mapped in [triage-labels.md](file:///C:/Users/HP/Desktop/termtk/docs/agents/triage-labels.md).
+## Local Contracts
 
-3. **Domain Vocabulary**:
-   - Align all code modifications, symbol naming, and issues with the terminology defined in [CONTEXT.md](file:///C:/Users/HP/Desktop/termtk/CONTEXT.md) (as documented in [domain.md](file:///C:/Users/HP/Desktop/termtk/docs/agents/domain.md)).
+- **ADRs**: Create under `docs/adr/` using `NNNN-title.md` format. Consult existing ADRs before proposing architectural shifts
+- **CE Lessons**: Append new entries with unique ID (`CE-XXX`). Document Symptom → Root Cause → Code Change → Prevention Rule
+- **Domain Vocabulary**: Align all code, naming, and issues with [CONTEXT.md](file:///C:/Users/HP/Desktop/termtk/CONTEXT.md) terminology (also documented in [domain.md](file:///C:/Users/HP/Desktop/termtk/docs/agents/domain.md))
+- **Issue Triage**: Use canonical states from [triage-labels.md](file:///C:/Users/HP/Desktop/termtk/docs/agents/triage-labels.md). Issues and PRDs live in `.scratch/`
+
+## Work Guidance
+
+- CE lessons are **mandatory reading** at session start — enforced by root AGENTS.md
+- ADRs are append-only. To supersede an ADR, create a new one referencing the old
+
+## Verification
+
+No automated verification. Manual review of doc accuracy during DOX closeout.
+
+## Child DOX Index
+
+- [adr/](file:///C:/Users/HP/Desktop/termtk/docs/adr) — Architecture Decision Records (0001-custom-relay-server.md)
+- [agents/](file:///C:/Users/HP/Desktop/termtk/docs/agents) — domain.md, issue-tracker.md, triage-labels.md
