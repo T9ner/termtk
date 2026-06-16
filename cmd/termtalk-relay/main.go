@@ -235,6 +235,31 @@ func (rs *RelayServer) StoredCount(recipientUUID string) int {
 	return len(rs.messageStore[recipientUUID])
 }
 
+// ConnectedCount returns the number of currently connected clients.
+func (rs *RelayServer) ConnectedCount() int {
+	rs.clientsMu.RLock()
+	defer rs.clientsMu.RUnlock()
+	return len(rs.clients)
+}
+
+// RegisteredCount returns the number of registered users in the directory.
+func (rs *RelayServer) RegisteredCount() int {
+	rs.registryMu.RLock()
+	defer rs.registryMu.RUnlock()
+	return len(rs.userRegistry)
+}
+
+// StoredMessageCount returns the total number of stored messages across all recipients.
+func (rs *RelayServer) StoredMessageCount() int {
+	rs.storeMu.RLock()
+	defer rs.storeMu.RUnlock()
+	total := 0
+	for _, msgs := range rs.messageStore {
+		total += len(msgs)
+	}
+	return total
+}
+
 // handleClient processes frames from a single TCP connection.
 func (rs *RelayServer) handleClient(conn net.Conn) {
 	defer conn.Close()
@@ -307,6 +332,24 @@ func (rs *RelayServer) handleClient(conn net.Conn) {
 					log.Printf("relay: failed to send pong to unregistered client: %v", err)
 				}
 			}
+
+		case "read_ack":
+			if client == nil {
+				log.Printf("Unregistered client attempted read_ack")
+				return
+			}
+			// Forward read_ack to the original sender so they can update status
+			rs.clientsMu.RLock()
+			target, online := rs.clients[frame.Recipient]
+			rs.clientsMu.RUnlock()
+			if online {
+				_ = target.Send(protocol.RelayFrame{
+					Type:       "read_ack",
+					UUID:       client.UUID,
+					MessageIDs: frame.MessageIDs,
+				})
+			}
+			// Don't store read_acks — they're ephemeral
 		}
 	}
 }
@@ -325,6 +368,16 @@ func main() {
 
 	log.Printf("TermTalk Relay Server v0.3.0 running on port %d...", *portFlag)
 	log.Printf("Features: store-and-forward, user registry, search, presence")
+
+	// Periodic health check logging for deployment monitoring
+	go func() {
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			log.Printf("[health] connected=%d registered=%d stored_msgs=%d",
+				rs.ConnectedCount(), rs.RegisteredCount(), rs.StoredMessageCount())
+		}
+	}()
 
 	for {
 		conn, err := listener.Accept()

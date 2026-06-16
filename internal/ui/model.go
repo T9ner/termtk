@@ -5,6 +5,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	"termtalk/internal/client"
 	"termtalk/internal/db"
+	"termtalk/internal/protocol"
 )
 
 type AppState int
@@ -64,6 +65,10 @@ type Model struct {
 	SearchResults     []SearchResult
 	SearchInput       textinput.Model
 	SearchSelectedIdx int
+
+	// Unread and presence state
+	UnreadCounts map[string]int               // contactUUID → unread count
+	OnlineUsers  map[string]protocol.UserInfo // uuid → presence info
 }
 
 // NewModel initializes the Bubble Tea model with the Client reference.
@@ -92,6 +97,9 @@ func NewModel(c *client.Client) *Model {
 
 	m.Viewport = viewport.New(0, 0)
 	m.Viewport.SetContent("Select a contact to start messaging.")
+
+	m.UnreadCounts = make(map[string]int)
+	m.OnlineUsers = make(map[string]protocol.UserInfo)
 
 	return m
 }

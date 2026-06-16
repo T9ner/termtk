@@ -299,3 +299,32 @@ func (d *Database) GetQueuedMessages(senderUUID string) ([]Message, error) {
 	}
 	return queued, nil
 }
+
+// GetUnreadCount returns the number of messages from contactUUID to localUUID
+// that have not been marked as 'read'.
+func (d *Database) GetUnreadCount(localUUID, contactUUID string) (int, error) {
+	var count int
+	err := d.conn.QueryRow(
+		`SELECT COUNT(*) FROM messages WHERE sender_uuid = ? AND recipient_uuid = ? AND status != 'read'`,
+		contactUUID, localUUID,
+	).Scan(&count)
+	return count, err
+}
+
+// MarkMessagesRead updates the status of specific messages to 'read' in a transaction.
+func (d *Database) MarkMessagesRead(messageIDs []string) error {
+	if len(messageIDs) == 0 {
+		return nil
+	}
+	tx, err := d.conn.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, id := range messageIDs {
+		if _, err := tx.Exec("UPDATE messages SET status = 'read' WHERE id = ?", id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}

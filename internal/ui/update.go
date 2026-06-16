@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"termtalk/internal/client"
 	"termtalk/internal/db"
+	"termtalk/internal/protocol"
 )
 
 // Init triggers the initial listening command for background events.
@@ -18,6 +20,7 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		m.ListenForEvents(),
 		textinput.Blink,
+		presenceTick(),
 	)
 }
 
@@ -47,6 +50,54 @@ func (m *Model) RefreshContacts() {
 			m.ReloadMessages()
 		}
 	}
+	m.RefreshUnreadCounts()
+}
+
+// RefreshUnreadCounts queries unread counts for all contacts.
+func (m *Model) RefreshUnreadCounts() {
+	if m.Client == nil {
+		return
+	}
+	for _, c := range m.Contacts {
+		count, err := m.Client.GetUnreadCount(c.UUID)
+		if err == nil {
+			m.UnreadCounts[c.UUID] = count
+		}
+	}
+}
+
+// sendReadReceipts marks messages from the current contact as read and sends a read_ack.
+func (m *Model) sendReadReceipts() {
+	if m.Client == nil || m.SelectedIdx < 0 || m.SelectedIdx >= len(m.Contacts) || m.LocalUser == nil {
+		return
+	}
+	contact := m.Contacts[m.SelectedIdx]
+	var unreadIDs []string
+	for _, msg := range m.ChatHistory {
+		if msg.Sender == contact.UUID && msg.Status != string(db.StatusRead) {
+			unreadIDs = append(unreadIDs, msg.ID)
+		}
+	}
+	if len(unreadIDs) == 0 {
+		return
+	}
+	// Mark locally as read
+	if err := m.Client.MarkMessagesRead(unreadIDs); err != nil {
+		log.Printf("ui: failed to mark messages as read: %v", err)
+	}
+	// Send read_ack to the sender via relay (fire-and-forget)
+	_ = m.Client.SendReadAck(contact.UUID, unreadIDs)
+	// Refresh unread counts
+	m.UnreadCounts[contact.UUID] = 0
+}
+
+// PresenceTickMsg triggers periodic online presence refresh.
+type PresenceTickMsg struct{}
+
+func presenceTick() tea.Cmd {
+	return tea.Tick(30*time.Second, func(t time.Time) tea.Msg {
+		return PresenceTickMsg{}
+	})
 }
 
 // ReloadMessages fetches message logs for the active conversation.
@@ -74,15 +125,11 @@ func (m *Model) ReloadMessages() {
 			var line string
 			if msg.Sender == m.LocalUser.UUID {
 				switch msg.Status {
-				case string(db.StatusDraft):
-					statusStr = " [Draft]"
-				case string(db.StatusQueued):
+				case string(db.StatusQueued), string(db.StatusStored):
 					statusStr = " [Queued]"
-				case string(db.StatusStored):
-					statusStr = " [☁ Stored]"
 				case string(db.StatusSynced):
 					statusStr = " [✓]"
-				case string(db.StatusAck):
+				case string(db.StatusAck), string(db.StatusRead):
 					statusStr = " [✓✓]"
 				}
 				line = fmt.Sprintf("[%s] You: %s%s", timestamp, msg.Content, statusStr)
@@ -207,6 +254,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if m.SelectedIdx > 0 {
 						m.SelectedIdx--
 						m.ReloadMessages()
+						m.sendReadReceipts()
 					}
 				}
 				// When FocusChat, viewport scroll is handled below
@@ -216,6 +264,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if m.SelectedIdx < len(m.Contacts)-1 {
 						m.SelectedIdx++
 						m.ReloadMessages()
+						m.sendReadReceipts()
 					}
 				}
 				// When FocusChat, viewport scroll is handled below
@@ -227,6 +276,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.Focus = FocusChat
 						m.MsgInput.Focus()
 						m.ReloadMessages()
+						m.sendReadReceipts()
 					}
 				} else {
 					// Enter in chat sends a message
@@ -407,6 +457,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case client.MessageReceivedEvent:
 		m.ReloadMessages()
+		// If the message is in the currently open chat, send read receipt
+		if m.State == StateDashboard && m.SelectedIdx >= 0 && m.SelectedIdx < len(m.Contacts) {
+			if msg.Message != nil && msg.Message.Sender == m.Contacts[m.SelectedIdx].UUID {
+				m.sendReadReceipts()
+			}
+		}
+		m.RefreshUnreadCounts()
 		// Re-trigger listener
 		cmds = append(cmds, m.ListenForEvents())
 
@@ -422,9 +479,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.ListenForEvents())
 
 	case client.OnlineListEvent:
-		// Can be used to refresh online status of contacts
+		// Update online presence map
+		newMap := make(map[string]protocol.UserInfo, len(msg.Users))
+		for _, u := range msg.Users {
+			newMap[u.UUID] = u
+		}
+		m.OnlineUsers = newMap
 		// Re-trigger listener
 		cmds = append(cmds, m.ListenForEvents())
+
+	case client.ReadAckEvent:
+		// Incoming read receipt — update local message statuses
+		if err := m.Client.MarkMessagesRead(msg.MessageIDs); err != nil {
+			log.Printf("ui: failed to process read_ack: %v", err)
+		}
+		m.ReloadMessages()
+		// Re-trigger listener
+		cmds = append(cmds, m.ListenForEvents())
+
+	case PresenceTickMsg:
+		// Periodically refresh online presence
+		if m.Client != nil {
+			_ = m.Client.GetOnlineUsers()
+		}
+		cmds = append(cmds, presenceTick())
 	}
 
 	// Update viewport scroll position based on focus mode

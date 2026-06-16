@@ -9,7 +9,7 @@ Package `protocol` defines shared wire-format types for TermTalk's relay protoco
 
 ## Ownership
 
-- [frames.go](file:///C:/Users/HP/Desktop/termtk/internal/protocol/frames.go): `RelayFrame` struct — the envelope type for all relay communication. `UserInfo` struct — user identity in search/online results
+- [frames.go](file:///C:/Users/HP/Desktop/termtk/internal/protocol/frames.go): `RelayFrame` struct — the envelope type for all relay communication. `UserInfo` struct — user identity in search/online results. `MessageIDs` field for read_ack batches
 
 ### Frame Types
 
@@ -27,6 +27,7 @@ Package `protocol` defines shared wire-format types for TermTalk's relay protoco
 | `who_online` | client→relay | Request list of online users |
 | `online_list` | relay→client | List of online users |
 | `ping`/`pong` | both | Keepalive heartbeat |
+| `read_ack` | client→relay→client | Batch read receipt for messages |
 
 ## Local Contracts
 

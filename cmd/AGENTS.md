@@ -12,8 +12,14 @@ The `cmd/` directory contains the `main` packages for TermTalk's two binaries:
 ## Ownership
 
 - [termtalk/main.go](file:///C:/Users/HP/Desktop/termtk/cmd/termtalk/main.go): Client entry point — wires SQLite DB, UDP discovery, TCP sync, and launches the Bubble Tea TUI
-- [termtalk-relay/main.go](file:///C:/Users/HP/Desktop/termtk/cmd/termtalk-relay/main.go): Relay server — `RelayServer` struct manages client registrations, message routing, store-and-forward for offline recipients, user registry, search, who_online presence, and heartbeat keepalive
+- [termtalk-relay/main.go](file:///C:/Users/HP/Desktop/termtk/cmd/termtalk-relay/main.go): Relay server — `RelayServer` struct manages client registrations, message routing, store-and-forward for offline recipients, user registry, search, who_online presence, heartbeat keepalive, and periodic health check logging (`ConnectedCount`, `RegisteredCount`, `StoredMessageCount`)
 - [termtalk-relay/relay_store_test.go](file:///C:/Users/HP/Desktop/termtk/cmd/termtalk-relay/relay_store_test.go): Tests for store-and-forward, flush-on-reconnect, delivery receipts, search, online status, and empty-query behavior (8 tests)
+
+## Deployment Infrastructure (Root-Level)
+
+- [Dockerfile](file:///C:/Users/HP/Desktop/termtk/Dockerfile): Multi-stage build for the relay server (Go 1.24 Alpine → Alpine 3.20 runtime). CGO_ENABLED=0 for cross-compilation
+- [fly.toml](file:///C:/Users/HP/Desktop/termtk/fly.toml): Fly.io deployment config — raw TCP passthrough on port 55558, London (lhr) primary region, TCP health check
+- [.dockerignore](file:///C:/Users/HP/Desktop/termtk/.dockerignore): Excludes SQLite databases, scratch/agent directories, and Windows executables from build context
 
 ## Local Contracts
 
