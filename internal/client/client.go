@@ -34,6 +34,14 @@ type OnlineListEvent struct{ Users []protocol.UserInfo }
 
 func (OnlineListEvent) isEvent() {}
 
+// ReadAckEvent is fired when a read receipt arrives from a contact.
+type ReadAckEvent struct {
+	SenderUUID string
+	MessageIDs []string
+}
+
+func (ReadAckEvent) isEvent() {}
+
 // Client is the unified coordinator for the TermTalk application.
 // It encapsulates the Database, PeerDiscovery daemon, and SyncManager
 // behind a single, testable interface so the TUI never touches
@@ -82,6 +90,9 @@ func New(dbPath string, tcpPort int) (*Client, error) {
 	}
 	c.syncMgr.OnOnlineList = func(users []protocol.UserInfo) {
 		c.events <- OnlineListEvent{Users: users}
+	}
+	c.syncMgr.OnReadAck = func(senderUUID string, messageIDs []string) {
+		c.events <- ReadAckEvent{SenderUUID: senderUUID, MessageIDs: messageIDs}
 	}
 
 	return c, nil
@@ -261,4 +272,28 @@ func (c *Client) SearchUsers(query string) error {
 // Results arrive asynchronously as an OnlineListEvent on the Events channel.
 func (c *Client) GetOnlineUsers() error {
 	return c.syncMgr.SendWhoOnline()
+}
+
+// SendReadAck sends a batch read receipt to the message sender via the relay.
+func (c *Client) SendReadAck(contactUUID string, messageIDs []string) error {
+	if len(messageIDs) == 0 {
+		return nil
+	}
+	return c.syncMgr.SendReadAck(contactUUID, messageIDs)
+}
+
+// GetUnreadCount returns the count of unread messages from a contact.
+func (c *Client) GetUnreadCount(contactUUID string) (int, error) {
+	c.mu.RLock()
+	p := c.profile
+	c.mu.RUnlock()
+	if p == nil {
+		return 0, fmt.Errorf("client: no local profile loaded")
+	}
+	return c.db.GetUnreadCount(p.UUID, contactUUID)
+}
+
+// MarkMessagesRead marks a batch of messages as read in the database.
+func (c *Client) MarkMessagesRead(messageIDs []string) error {
+	return c.db.MarkMessagesRead(messageIDs)
 }

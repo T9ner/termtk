@@ -126,7 +126,7 @@ func (m Model) viewProfile() string {
 	sb.WriteString("\n\n")
 
 	if m.LocalUser != nil {
-		boxWidth := 44
+		boxWidth := 50
 		border := strings.Repeat("═", boxWidth-2)
 		divider := strings.Repeat("─", boxWidth-2)
 
@@ -137,17 +137,22 @@ func (m Model) viewProfile() string {
 			Foreground(accentColor).
 			Bold(true)
 
+		handle := fmt.Sprintf("@%s", m.LocalUser.Username)
 		shareID := fmt.Sprintf("%s:%s", m.LocalUser.Username, m.LocalUser.UUID)
 
 		sb.WriteString(profileStyle.Render("╔"+border+"╗") + "\n")
 		sb.WriteString(profileStyle.Render("║") + centerPad("Your TermTalk Profile", boxWidth-2) + profileStyle.Render("║") + "\n")
 		sb.WriteString(profileStyle.Render("╠"+divider+"╣") + "\n")
 		sb.WriteString(profileStyle.Render("║") + padRight("", boxWidth-2) + profileStyle.Render("║") + "\n")
+		sb.WriteString(profileStyle.Render("║") + padRight(fmt.Sprintf("  Handle:    %s", handle), boxWidth-2) + profileStyle.Render("║") + "\n")
 		sb.WriteString(profileStyle.Render("║") + padRight(fmt.Sprintf("  Username:  %s", m.LocalUser.Username), boxWidth-2) + profileStyle.Render("║") + "\n")
 		sb.WriteString(profileStyle.Render("║") + padRight(fmt.Sprintf("  UUID:      %s", m.LocalUser.UUID), boxWidth-2) + profileStyle.Render("║") + "\n")
 		sb.WriteString(profileStyle.Render("║") + padRight("", boxWidth-2) + profileStyle.Render("║") + "\n")
 		sb.WriteString(profileStyle.Render("║") + padRight("  Share ID (give this to peers):", boxWidth-2) + profileStyle.Render("║") + "\n")
 		sb.WriteString(profileStyle.Render("║") + "  " + accentTextStyle.Render(shareID) + padRight("", boxWidth-2-2-len(shareID)) + profileStyle.Render("║") + "\n")
+		sb.WriteString(profileStyle.Render("║") + padRight("", boxWidth-2) + profileStyle.Render("║") + "\n")
+		findMeLine := fmt.Sprintf("  Find me on TermTalk: %s", handle)
+		sb.WriteString(profileStyle.Render("║") + "  " + accentTextStyle.Render(fmt.Sprintf("Find me on TermTalk: %s", handle)) + padRight("", boxWidth-2-2-len(findMeLine)+2) + profileStyle.Render("║") + "\n")
 		sb.WriteString(profileStyle.Render("║") + padRight("", boxWidth-2) + profileStyle.Render("║") + "\n")
 		sb.WriteString(profileStyle.Render("╚"+border+"╝") + "\n")
 	} else {
@@ -183,8 +188,8 @@ func (m Model) viewDashboard() string {
 	var identityBar string
 	if m.LocalUser != nil {
 		headerStr = titleStyle.Render(fmt.Sprintf(" TermTalk | User: %s ", m.LocalUser.Username))
-		shareID := fmt.Sprintf("%s:%s", m.LocalUser.Username, m.LocalUser.UUID)
-		identityBar = idBarStyle.Render(fmt.Sprintf("📋 Your ID: %s  |  Ctrl+P: Full Profile", shareID))
+		handle := fmt.Sprintf("@%s", m.LocalUser.Username)
+		identityBar = idBarStyle.Render(fmt.Sprintf("%s  |  Ctrl+P: Profile  |  Ctrl+F: Find Users", handle))
 	} else {
 		headerStr = titleStyle.Render(" TermTalk ")
 	}
@@ -235,7 +240,9 @@ func (m Model) viewDashboard() string {
 
 		for i := start; i < end; i++ {
 			c := m.Contacts[i]
-			online := m.Client != nil && m.Client.IsPeerOnline(c.UUID)
+			// Check both local P2P connection and relay online presence
+			_, relayOnline := m.OnlineUsers[c.UUID]
+			online := (m.Client != nil && m.Client.IsPeerOnline(c.UUID)) || relayOnline
 			badge := offlineBadge.Render("[OFF]")
 			if online {
 				badge = onlineBadge.Render("[ON ]")
@@ -246,7 +253,15 @@ func (m Model) viewDashboard() string {
 				contactName = contactName[:9] + "..."
 			}
 
-			line := fmt.Sprintf("%s %s", badge, contactName)
+			// Show unread count badge
+			unread := m.UnreadCounts[c.UUID]
+			unreadStr := ""
+			if unread > 0 {
+				unreadStr = fmt.Sprintf(" (%d)", unread)
+				contactName = lipgloss.NewStyle().Bold(true).Render(contactName)
+			}
+
+			line := fmt.Sprintf("%s %s%s", badge, contactName, unreadStr)
 			if i == m.SelectedIdx {
 				sidebarBuilder.WriteString(selectedStyle.Render(line) + "\n")
 			} else {
@@ -273,8 +288,9 @@ func (m Model) viewDashboard() string {
 	var chatBuilder strings.Builder
 	if m.SelectedIdx >= 0 && m.SelectedIdx < len(m.Contacts) {
 		contact := m.Contacts[m.SelectedIdx]
+		_, relayOnline := m.OnlineUsers[contact.UUID]
 		statusText := "offline"
-		if m.Client.IsPeerOnline(contact.UUID) {
+		if m.Client.IsPeerOnline(contact.UUID) || relayOnline {
 			statusText = "online"
 		}
 		chatHeaderText := fmt.Sprintf("Chatting with %s (%s)", contact.Username, statusText)
