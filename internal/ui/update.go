@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"termtalk/internal/client"
+	"termtalk/internal/db"
 )
 
 // Init triggers the initial listening command for background events.
@@ -72,11 +74,11 @@ func (m *Model) ReloadMessages() {
 			var line string
 			if msg.Sender == m.LocalUser.UUID {
 				switch msg.Status {
-				case "draft":
+				case string(db.StatusDraft):
 					statusStr = " [Draft]"
-				case "queued":
+				case string(db.StatusQueued):
 					statusStr = " [Queued]"
-				case "synced":
+				case string(db.StatusSynced):
 					statusStr = " [✓]"
 				}
 				line = fmt.Sprintf("[%s] You: %s%s", timestamp, msg.Content, statusStr)
@@ -141,8 +143,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					profile, err := m.Client.Register(username)
 					if err == nil {
 						m.LocalUser = profile
-						_ = m.Client.Start()
+						_ = m.Client.Start(context.Background())
 						m.State = StateDashboard
+						m.Focus = FocusSidebar
 						m.RefreshContacts()
 						m.MsgInput.Focus()
 					}
@@ -154,6 +157,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case tea.KeyEsc, tea.KeyCtrlQ:
 				return m, tea.Quit
 
+			case tea.KeyTab:
+				// Toggle focus between sidebar and chat panes
+				if m.Focus == FocusSidebar {
+					m.Focus = FocusChat
+					m.MsgInput.Focus()
+				} else {
+					m.Focus = FocusSidebar
+					m.MsgInput.Blur()
+				}
+
+			case tea.KeyCtrlP:
+				m.State = StateProfile
+
 			case tea.KeyCtrlE:
 				if m.SelectedIdx >= 0 {
 					m.State = StateExport
@@ -164,7 +180,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.SetStatus("No contact selected to export messages for.", 3*time.Second)
 				}
 
-			case tea.KeyCtrlI:
+			case tea.KeyCtrlO:
 				m.State = StateImport
 				m.PathInput.Placeholder = "Enter path to import sync file from (e.g. sync.json)..."
 				m.PathInput.SetValue("")
@@ -176,31 +192,58 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.AddContactInput.Focus()
 
 			case tea.KeyUp:
-				if m.SelectedIdx > 0 {
-					m.SelectedIdx--
-					m.ReloadMessages()
+				if m.Focus == FocusSidebar {
+					if m.SelectedIdx > 0 {
+						m.SelectedIdx--
+						m.ReloadMessages()
+					}
 				}
+				// When FocusChat, viewport scroll is handled below
 
 			case tea.KeyDown:
-				if m.SelectedIdx < len(m.Contacts)-1 {
-					m.SelectedIdx++
-					m.ReloadMessages()
+				if m.Focus == FocusSidebar {
+					if m.SelectedIdx < len(m.Contacts)-1 {
+						m.SelectedIdx++
+						m.ReloadMessages()
+					}
 				}
+				// When FocusChat, viewport scroll is handled below
 
 			case tea.KeyEnter:
-				text := strings.TrimSpace(m.MsgInput.Value())
-				if text != "" && m.SelectedIdx >= 0 {
-					contact := m.Contacts[m.SelectedIdx]
-					_ = m.Client.SendMessage(contact.UUID, text)
-					m.MsgInput.SetValue("")
-					m.ReloadMessages()
+				if m.Focus == FocusSidebar {
+					// Enter in sidebar selects the contact and switches to chat
+					if m.SelectedIdx >= 0 && m.SelectedIdx < len(m.Contacts) {
+						m.Focus = FocusChat
+						m.MsgInput.Focus()
+						m.ReloadMessages()
+					}
+				} else {
+					// Enter in chat sends a message
+					text := strings.TrimSpace(m.MsgInput.Value())
+					if text != "" && m.SelectedIdx >= 0 {
+						contact := m.Contacts[m.SelectedIdx]
+						_ = m.Client.SendMessage(contact.UUID, text)
+						m.MsgInput.SetValue("")
+						m.ReloadMessages()
+					}
 				}
 
 			default:
-				// Forward input keypresses to active chat input
-				var cmd tea.Cmd
-				m.MsgInput, cmd = m.MsgInput.Update(msg)
-				cmds = append(cmds, cmd)
+				if m.Focus == FocusChat {
+					// Forward input keypresses to active chat input
+					var cmd tea.Cmd
+					m.MsgInput, cmd = m.MsgInput.Update(msg)
+					cmds = append(cmds, cmd)
+				}
+			}
+
+		case StateProfile:
+			if msg.Type == tea.KeyEsc {
+				m.State = StateDashboard
+				if m.Focus == FocusChat {
+					m.MsgInput.Focus()
+				}
+				return m, nil
 			}
 
 		case StateExport:
@@ -291,7 +334,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Try to connect directly to peer over TCP if discovered
 		if msg.Contact != nil {
 			go func() {
-				_ = m.Client.ConnectToPeer(msg.Contact)
+				_ = m.Client.ConnectToPeer(context.Background(), msg.Contact)
 			}()
 		}
 		// Re-trigger listener
@@ -303,11 +346,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.ListenForEvents())
 	}
 
-	// Update viewport scroll position (ignoring Up/Down arrow keys on Dashboard to avoid selection conflict)
+	// Update viewport scroll position based on focus mode
 	var vpCmd tea.Cmd
 	shouldUpdateViewport := true
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		if m.State == StateDashboard && (keyMsg.Type == tea.KeyUp || keyMsg.Type == tea.KeyDown) {
+		// Only suppress viewport scroll when in sidebar focus (arrows navigate contacts)
+		if m.State == StateDashboard && m.Focus == FocusSidebar && (keyMsg.Type == tea.KeyUp || keyMsg.Type == tea.KeyDown) {
 			shouldUpdateViewport = false
 		}
 	}

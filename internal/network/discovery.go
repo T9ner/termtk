@@ -1,7 +1,9 @@
 package network
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"net"
 	"strconv"
 	"strings"
@@ -59,7 +61,7 @@ func (p *PeerDiscovery) getCredentials() (string, string) {
 }
 
 // Start spawns the listener and announcer background loops.
-func (p *PeerDiscovery) Start() error {
+func (p *PeerDiscovery) Start(_ context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -157,7 +159,9 @@ func (p *PeerDiscovery) listenLoop(conn net.PacketConn) {
 
 			// Save to database
 			if p.database != nil {
-				_ = p.database.UpsertContact(contact)
+				if err := p.database.UpsertContact(contact); err != nil {
+					log.Printf("discovery: failed to upsert contact %s: %v", peerUUID, err)
+				}
 			}
 
 			// Update active peers list

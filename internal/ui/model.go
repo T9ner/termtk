@@ -15,6 +15,15 @@ const (
 	StateExport
 	StateImport
 	StateAddContact
+	StateProfile
+)
+
+// FocusMode indicates which pane has keyboard focus on the dashboard.
+type FocusMode int
+
+const (
+	FocusSidebar FocusMode = iota
+	FocusChat
 )
 
 // Model represents the state of the TermTalk TUI application.
@@ -22,6 +31,9 @@ type Model struct {
 	State     AppState
 	Client    *client.Client
 	LocalUser *db.Profile
+
+	// Focus tracks which dashboard pane owns keyboard input.
+	Focus FocusMode
 
 	// UI Component states
 	UsernameInput   textinput.Model // For profile creation
@@ -45,6 +57,7 @@ func NewModel(c *client.Client) *Model {
 	m := &Model{
 		Client:      c,
 		SelectedIdx: -1,
+		Focus:       FocusSidebar,
 	}
 
 	// Initialize inputs
