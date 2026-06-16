@@ -55,17 +55,15 @@ archives:
       - README.md
       - docs/**/*
 
-# GoReleaser v2 uses homebrew_casks (replaces deprecated brews)
-homebrew_casks:
-  - name: termtalk
-    # Formula is pushed to your personal Homebrew Tap repository
-    # e.g., github.com/T9ner/homebrew-tap
-    repository:
-      owner: T9ner
-      name: homebrew-tap
-    commit_author:
-      name: GoReleaser Bot
-      email: bot@goreleaser.com
-    homepage: "https://github.com/T9ner/termtk"
-    description: "Offline-first, decentralized terminal messenger"
-    license: "MIT"
+# Uncomment when T9ner/homebrew-tap repo is created on GitHub:
+# homebrew_casks:
+#   - name: termtalk
+#     repository:
+#       owner: T9ner
+#       name: homebrew-tap
+#     commit_author:
+#       name: GoReleaser Bot
+#       email: bot@goreleaser.com
+#     homepage: "https://github.com/T9ner/termtk"
+#     description: "Offline-first, decentralized terminal messenger"
+#     license: "MIT"
