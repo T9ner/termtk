@@ -1,13 +1,16 @@
 package network
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"sync"
 	"testing"
 	"time"
 
 	"termtalk/internal/db"
+	"termtalk/internal/protocol"
 )
 
 // MockRelayServer represents an in-memory relay server for integration tests.
@@ -25,7 +28,7 @@ type mockClientConn struct {
 	mu   sync.Mutex
 }
 
-func (mcc *mockClientConn) Send(frame RelayFrame) error {
+func (mcc *mockClientConn) Send(frame protocol.RelayFrame) error {
 	mcc.mu.Lock()
 	defer mcc.mu.Unlock()
 	return mcc.enc.Encode(frame)
@@ -48,6 +51,11 @@ func StartMockRelay(t *testing.T, addr string) *MockRelayServer {
 	go mr.acceptLoop()
 
 	return mr
+}
+
+// Addr returns the listener's actual network address.
+func (mr *MockRelayServer) Addr() string {
+	return mr.listener.Addr().String()
 }
 
 // Stop stops the mock relay server.
@@ -92,7 +100,7 @@ func (mr *MockRelayServer) handleClient(conn net.Conn) {
 	}()
 
 	for {
-		var frame RelayFrame
+		var frame protocol.RelayFrame
 		if err := dec.Decode(&frame); err != nil {
 			return
 		}
@@ -109,7 +117,7 @@ func (mr *MockRelayServer) handleClient(conn net.Conn) {
 			}
 			mr.clients[frame.UUID] = client
 			mr.mu.Unlock()
-			_ = client.Send(RelayFrame{Type: "registered"})
+			_ = client.Send(protocol.RelayFrame{Type: "registered"})
 
 		case "relay":
 			mr.mu.Lock()
@@ -127,55 +135,56 @@ func (mr *MockRelayServer) handleClient(conn net.Conn) {
 				}
 				mr.mu.Unlock()
 
-				_ = target.Send(RelayFrame{
+				_ = target.Send(protocol.RelayFrame{
 					Type:    "msg",
 					UUID:    senderUUID,
 					Message: frame.Message,
 				})
 			} else {
 				if client != nil {
-					_ = client.Send(RelayFrame{Type: "offline", Recipient: frame.Recipient})
+					_ = client.Send(protocol.RelayFrame{Type: "offline", Recipient: frame.Recipient})
 				} else {
-					_ = enc.Encode(RelayFrame{Type: "offline", Recipient: frame.Recipient})
+					_ = enc.Encode(protocol.RelayFrame{Type: "offline", Recipient: frame.Recipient})
 				}
 			}
 		case "ping":
 			if client != nil {
-				_ = client.Send(RelayFrame{Type: "pong"})
+				_ = client.Send(protocol.RelayFrame{Type: "pong"})
 			} else {
-				_ = enc.Encode(RelayFrame{Type: "pong"})
+				_ = enc.Encode(protocol.RelayFrame{Type: "pong"})
 			}
 		}
 	}
 }
 
 func TestSyncManagerViaRelay(t *testing.T) {
-	relayAddr := "127.0.0.1:55569"
-	mr := StartMockRelay(t, relayAddr)
+	// Start mock relay on OS-assigned port
+	mr := StartMockRelay(t, "127.0.0.1:0")
 	defer mr.Stop()
+	relayAddr := mr.Addr()
 
-	// 1. Create DB and SyncManager for Alice
+	// 1. Create DB and SyncManager for Alice (port 0 = OS-assigned)
 	aliceDB, aliceCleanup := createTempDB(t, "alice_relay")
 	defer aliceCleanup()
 
 	aliceProfile := &db.Profile{UUID: "alice-uuid", Username: "alice"}
 	_ = aliceDB.SaveProfile(aliceProfile)
 
-	aliceSync := NewSyncManager(aliceProfile.UUID, aliceProfile.Username, 55563, aliceDB)
+	aliceSync := NewSyncManager(aliceProfile.UUID, aliceProfile.Username, 0, aliceDB)
 	aliceSync.SetRelayAddr(relayAddr)
-	_ = aliceSync.Start()
+	_ = aliceSync.Start(context.Background())
 	defer aliceSync.Stop()
 
-	// 2. Create DB and SyncManager for Bob
+	// 2. Create DB and SyncManager for Bob (port 0 = OS-assigned)
 	bobDB, bobCleanup := createTempDB(t, "bob_relay")
 	defer bobCleanup()
 
 	bobProfile := &db.Profile{UUID: "bob-uuid", Username: "bob"}
 	_ = bobDB.SaveProfile(bobProfile)
 
-	bobSync := NewSyncManager(bobProfile.UUID, bobProfile.Username, 55564, bobDB)
+	bobSync := NewSyncManager(bobProfile.UUID, bobProfile.Username, 0, bobDB)
 	bobSync.SetRelayAddr(relayAddr)
-	_ = bobSync.Start()
+	_ = bobSync.Start(context.Background())
 	defer bobSync.Stop()
 
 	// Register Bob in Alice's contact list (as offline/relay target)
@@ -201,7 +210,7 @@ func TestSyncManagerViaRelay(t *testing.T) {
 	// Bind Bob callback to wait for relayed message
 	messageReceived := make(chan *db.Message, 1)
 	bobSync.OnMsgRecv = func(msg *db.Message) {
-		if msg.Status == "synced" {
+		if msg.Status == string(db.StatusSynced) {
 			messageReceived <- msg
 		}
 	}
@@ -224,4 +233,7 @@ func TestSyncManagerViaRelay(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatalf("bob timed out waiting for relayed message")
 	}
+
+	// Suppress unused import warning
+	_ = fmt.Sprintf
 }

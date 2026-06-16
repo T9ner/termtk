@@ -1,5 +1,8 @@
+# Binaries
 /termtalk
-/termtalk.exe
 /termtalk-relay
-/termtalk-relay.exe
-termtalk.db*
+*.exe
+
+# Databases
+*.db
+!*.db-journal

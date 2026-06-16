@@ -14,6 +14,7 @@ var (
 	grayColor     = lipgloss.Color("#8A8A8A")
 	errorColor    = lipgloss.Color("#D70000")
 	darkGrayColor = lipgloss.Color("#262626")
+	navyColor     = lipgloss.Color("#1A1A2E") // Dark navy for identity bar
 
 	// Styles
 	titleStyle = lipgloss.NewStyle().
@@ -59,6 +60,29 @@ var (
 	statusStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FFAF00")).
 			Bold(true)
+
+	idBarStyle = lipgloss.NewStyle().
+			Foreground(accentColor).
+			Background(navyColor).
+			Bold(true).
+			Padding(0, 1).
+			MarginBottom(1)
+
+	// Active-pane accent styles
+	sidebarActiveStyle = lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder(), false, true, false, false).
+				BorderForeground(accentColor).
+				PaddingRight(1).
+				Width(23)
+
+	sidebarHeaderActiveStyle = lipgloss.NewStyle().
+					Foreground(accentColor).
+					Bold(true)
+
+	chatHeaderActiveStyle = lipgloss.NewStyle().
+				Foreground(accentColor).
+				Bold(true).
+				Underline(true)
 )
 
 // View renders the TUI screen based on the current state.
@@ -68,6 +92,8 @@ func (m Model) View() string {
 		return m.viewRegister()
 	case StateDashboard:
 		return m.viewDashboard()
+	case StateProfile:
+		return m.viewProfile()
 	case StateExport:
 		return m.viewExport()
 	case StateImport:
@@ -91,26 +117,90 @@ func (m Model) viewRegister() string {
 	return sb.String()
 }
 
+func (m Model) viewProfile() string {
+	var sb strings.Builder
+	sb.WriteString("\n")
+	sb.WriteString(titleStyle.Render(" Your TermTalk Profile "))
+	sb.WriteString("\n\n")
+
+	if m.LocalUser != nil {
+		boxWidth := 44
+		border := strings.Repeat("═", boxWidth-2)
+		divider := strings.Repeat("─", boxWidth-2)
+
+		profileStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFF"))
+
+		accentTextStyle := lipgloss.NewStyle().
+			Foreground(accentColor).
+			Bold(true)
+
+		shareID := fmt.Sprintf("%s:%s", m.LocalUser.Username, m.LocalUser.UUID)
+
+		sb.WriteString(profileStyle.Render("╔"+border+"╗") + "\n")
+		sb.WriteString(profileStyle.Render("║") + centerPad("Your TermTalk Profile", boxWidth-2) + profileStyle.Render("║") + "\n")
+		sb.WriteString(profileStyle.Render("╠"+divider+"╣") + "\n")
+		sb.WriteString(profileStyle.Render("║") + padRight("", boxWidth-2) + profileStyle.Render("║") + "\n")
+		sb.WriteString(profileStyle.Render("║") + padRight(fmt.Sprintf("  Username:  %s", m.LocalUser.Username), boxWidth-2) + profileStyle.Render("║") + "\n")
+		sb.WriteString(profileStyle.Render("║") + padRight(fmt.Sprintf("  UUID:      %s", m.LocalUser.UUID), boxWidth-2) + profileStyle.Render("║") + "\n")
+		sb.WriteString(profileStyle.Render("║") + padRight("", boxWidth-2) + profileStyle.Render("║") + "\n")
+		sb.WriteString(profileStyle.Render("║") + padRight("  Share ID (give this to peers):", boxWidth-2) + profileStyle.Render("║") + "\n")
+		sb.WriteString(profileStyle.Render("║") + "  " + accentTextStyle.Render(shareID) + padRight("", boxWidth-2-2-len(shareID)) + profileStyle.Render("║") + "\n")
+		sb.WriteString(profileStyle.Render("║") + padRight("", boxWidth-2) + profileStyle.Render("║") + "\n")
+		sb.WriteString(profileStyle.Render("╚"+border+"╝") + "\n")
+	} else {
+		sb.WriteString(lipgloss.NewStyle().Foreground(grayColor).Render("No profile loaded.") + "\n")
+	}
+
+	sb.WriteString("\n")
+	sb.WriteString(footerStyle.Render("Esc: Back to Dashboard"))
+	return sb.String()
+}
+
+// centerPad centers text within the given width, padding with spaces.
+func centerPad(text string, width int) string {
+	if len(text) >= width {
+		return text[:width]
+	}
+	left := (width - len(text)) / 2
+	right := width - len(text) - left
+	return strings.Repeat(" ", left) + text + strings.Repeat(" ", right)
+}
+
+// padRight pads text to the given width with trailing spaces.
+func padRight(text string, width int) string {
+	if len(text) >= width {
+		return text[:width]
+	}
+	return text + strings.Repeat(" ", width-len(text))
+}
+
 func (m Model) viewDashboard() string {
 	// 1. Header
 	var headerStr string
-	var shareBanner string
+	var identityBar string
 	if m.LocalUser != nil {
 		headerStr = titleStyle.Render(fmt.Sprintf(" TermTalk | User: %s ", m.LocalUser.Username))
-		shareBanner = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFF")).
-			Background(lipgloss.Color("#2D2D2D")).
-			Bold(true).
-			Padding(0, 1).
-			MarginBottom(1).
-			Render(fmt.Sprintf("Your Share ID (copy to share): %s:%s", m.LocalUser.Username, m.LocalUser.UUID))
+		shareID := fmt.Sprintf("%s:%s", m.LocalUser.Username, m.LocalUser.UUID)
+		identityBar = idBarStyle.Render(fmt.Sprintf("📋 Your ID: %s  |  Ctrl+P: Full Profile", shareID))
 	} else {
 		headerStr = titleStyle.Render(" TermTalk ")
 	}
 
 	// 2. Sidebar (Contacts list)
 	var sidebarBuilder strings.Builder
-	sidebarBuilder.WriteString(headerStyle.Render("CONTACTS") + "\n\n")
+
+	// Sidebar header with contact count and focus indicator
+	contactCount := len(m.Contacts)
+	sidebarHeaderText := fmt.Sprintf("CONTACTS (%d)", contactCount)
+	if m.Focus == FocusSidebar {
+		sidebarBuilder.WriteString(sidebarHeaderActiveStyle.Render(sidebarHeaderText) + "\n")
+		sidebarBuilder.WriteString(sidebarHeaderActiveStyle.Render(strings.Repeat("─", 15)) + "\n")
+	} else {
+		sidebarBuilder.WriteString(headerStyle.Render(sidebarHeaderText) + "\n")
+		sidebarBuilder.WriteString(lipgloss.NewStyle().Foreground(grayColor).Render(strings.Repeat("─", 15)) + "\n")
+	}
+
 	if len(m.Contacts) == 0 {
 		sidebarBuilder.WriteString(lipgloss.NewStyle().Foreground(grayColor).Render("No contacts yet.\nUse Ctrl+N to add."))
 	} else {
@@ -168,7 +258,14 @@ func (m Model) viewDashboard() string {
 			sidebarBuilder.WriteString("\n")
 		}
 	}
-	sidebarView := sidebarStyle.Render(sidebarBuilder.String())
+
+	// Apply active-pane sidebar style
+	var sidebarView string
+	if m.Focus == FocusSidebar {
+		sidebarView = sidebarActiveStyle.Render(sidebarBuilder.String())
+	} else {
+		sidebarView = sidebarStyle.Render(sidebarBuilder.String())
+	}
 
 	// 3. Chat Pane (Messages history + Input field)
 	var chatBuilder strings.Builder
@@ -178,31 +275,67 @@ func (m Model) viewDashboard() string {
 		if m.Client.IsPeerOnline(contact.UUID) {
 			onlineStatus = onlineBadge.Render("online")
 		}
-		chatBuilder.WriteString(headerStyle.Render(fmt.Sprintf("Chatting with %s (%s)", contact.Username, onlineStatus)) + "\n\n")
-		chatBuilder.WriteString(m.Viewport.View() + "\n\n")
+		chatHeaderText := fmt.Sprintf("Chatting with %s (%s)", contact.Username, onlineStatus)
+		if m.Focus == FocusChat {
+			chatBuilder.WriteString(chatHeaderActiveStyle.Render(chatHeaderText) + "\n\n")
+		} else {
+			chatBuilder.WriteString(headerStyle.Render(chatHeaderText) + "\n\n")
+		}
+
+		// Show empty conversation state or messages
+		if len(m.ChatHistory) == 0 {
+			emptyMsg := lipgloss.NewStyle().Foreground(grayColor).Italic(true)
+			chatBuilder.WriteString(emptyMsg.Render(fmt.Sprintf("No messages with %s yet.", contact.Username)) + "\n")
+			chatBuilder.WriteString(emptyMsg.Render("Type a message below to start the conversation.") + "\n\n")
+		} else {
+			chatBuilder.WriteString(m.Viewport.View() + "\n\n")
+		}
 		chatBuilder.WriteString(m.MsgInput.View())
 	} else {
-		chatBuilder.WriteString(lipgloss.NewStyle().Foreground(grayColor).Render("Welcome! Import a sync file (Ctrl+I) or add a friend (Ctrl+N) to start chatting."))
+		// No contact selected — welcome empty state
+		welcomeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFF"))
+		accentText := lipgloss.NewStyle().Foreground(accentColor).Bold(true)
+		grayText := lipgloss.NewStyle().Foreground(grayColor)
+
+		chatBuilder.WriteString("\n")
+		chatBuilder.WriteString(welcomeStyle.Render("  ┌─────────────────────────────────┐") + "\n")
+		chatBuilder.WriteString(welcomeStyle.Render("  │                                 │") + "\n")
+		chatBuilder.WriteString(welcomeStyle.Render("  │   ") + accentText.Render("👋 Welcome to TermTalk!") + welcomeStyle.Render("      │") + "\n")
+		chatBuilder.WriteString(welcomeStyle.Render("  │                                 │") + "\n")
+		chatBuilder.WriteString(welcomeStyle.Render("  │   Get started:                  │") + "\n")
+		chatBuilder.WriteString(welcomeStyle.Render("  │   ") + grayText.Render("• Ctrl+N to add a peer") + welcomeStyle.Render("    │") + "\n")
+		chatBuilder.WriteString(welcomeStyle.Render("  │   ") + grayText.Render("• Ctrl+I to import sync") + welcomeStyle.Render("   │") + "\n")
+		chatBuilder.WriteString(welcomeStyle.Render("  │   ") + grayText.Render("• Ctrl+P to view profile") + welcomeStyle.Render("  │") + "\n")
+		chatBuilder.WriteString(welcomeStyle.Render("  │                                 │") + "\n")
+		chatBuilder.WriteString(welcomeStyle.Render("  └─────────────────────────────────┘") + "\n")
 	}
 	chatView := chatBoxStyle.Render(chatBuilder.String())
 
 	// Combine Sidebar and Chat side-by-side
 	bodyView := lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, chatView)
 
-	// 4. Status Bar & Footer
+	// 4. Status Bar & Context-Aware Footer
 	var footerBuilder strings.Builder
 	if m.StatusMessage != "" {
 		footerBuilder.WriteString(statusStyle.Render(m.StatusMessage) + "\n")
 	} else {
 		footerBuilder.WriteString("\n")
 	}
-	footerBuilder.WriteString(footerStyle.Render("Ctrl+N: Add Peer | Ctrl+E: Export Sync | Ctrl+I: Import Sync | Ctrl+Q: Quit"))
+	footerBuilder.WriteString(footerStyle.Render(m.dashboardFooter()))
 	footerView := footerBuilder.String()
 
-	if shareBanner != "" {
-		return lipgloss.JoinVertical(lipgloss.Left, headerStr, shareBanner, bodyView, footerView)
+	if identityBar != "" {
+		return lipgloss.JoinVertical(lipgloss.Left, headerStr, identityBar, bodyView, footerView)
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, headerStr, bodyView, footerView)
+}
+
+// dashboardFooter returns context-aware shortcut hints based on focus mode.
+func (m Model) dashboardFooter() string {
+	if m.Focus == FocusSidebar {
+		return "↑↓: Navigate | Enter: Open Chat | Tab: Switch to Chat | Ctrl+N: Add Peer | Ctrl+P: Profile | Ctrl+Q: Quit"
+	}
+	return "↑↓: Scroll | Enter: Send | Tab: Switch to Contacts | Ctrl+E: Export | Ctrl+O: Import | Ctrl+Q: Quit"
 }
 
 func (m Model) viewExport() string {
@@ -216,7 +349,8 @@ func (m Model) viewExport() string {
 	}
 	sb.WriteString("Provide the destination JSON filepath:\n\n")
 	sb.WriteString(m.PathInput.View())
-	sb.WriteString("\n\n(Enter: Confirm | Esc: Cancel)")
+	sb.WriteString("\n\n")
+	sb.WriteString(footerStyle.Render("Enter: Confirm | Esc: Cancel"))
 	return sb.String()
 }
 
@@ -228,7 +362,8 @@ func (m Model) viewImport() string {
 	sb.WriteString("Import messages from a sync JSON file received from a peer.\n")
 	sb.WriteString("Provide the source JSON filepath:\n\n")
 	sb.WriteString(m.PathInput.View())
-	sb.WriteString("\n\n(Enter: Confirm | Esc: Cancel)")
+	sb.WriteString("\n\n")
+	sb.WriteString(footerStyle.Render("Enter: Confirm | Esc: Cancel"))
 	return sb.String()
 }
 
@@ -240,6 +375,7 @@ func (m Model) viewAddContact() string {
 	sb.WriteString("Ask your friend for their profile string, which looks like 'username:uuid'.\n")
 	sb.WriteString("Paste it below:\n\n")
 	sb.WriteString(m.AddContactInput.View())
-	sb.WriteString("\n\n(Enter: Confirm | Esc: Cancel)")
+	sb.WriteString("\n\n")
+	sb.WriteString(footerStyle.Render("Enter: Confirm | Esc: Cancel"))
 	return sb.String()
 }

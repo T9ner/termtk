@@ -8,16 +8,9 @@ import (
 	"log"
 	"net"
 	"sync"
-)
 
-// RelayFrame represents the message wrapper used by the relay server.
-type RelayFrame struct {
-	Type      string          `json:"type"`                // "register", "relay", "msg", "offline", "ping"
-	UUID      string          `json:"uuid,omitempty"`      // Client registration UUID
-	Username  string          `json:"username,omitempty"`  // Client registration Username
-	Recipient string          `json:"recipient,omitempty"` // Target Recipient UUID
-	Message   json.RawMessage `json:"message,omitempty"`   // Nested Message payload
-}
+	"termtalk/internal/protocol"
+)
 
 type ClientConn struct {
 	UUID     string
@@ -27,7 +20,7 @@ type ClientConn struct {
 	mu       sync.Mutex // Protects enc
 }
 
-func (cc *ClientConn) Send(frame RelayFrame) error {
+func (cc *ClientConn) Send(frame protocol.RelayFrame) error {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 	return cc.enc.Encode(frame)
@@ -81,7 +74,7 @@ func handleClient(conn net.Conn) {
 	}()
 
 	for {
-		var frame RelayFrame
+		var frame protocol.RelayFrame
 		err := dec.Decode(&frame)
 		if err != nil {
 			if err != io.EOF {
@@ -108,7 +101,9 @@ func handleClient(conn net.Conn) {
 			log.Printf("Client registered: %s (%s) from %s", client.Username, client.UUID[:8], conn.RemoteAddr())
 
 			// Respond with success ack
-			_ = client.Send(RelayFrame{Type: "registered"})
+			if err := client.Send(protocol.RelayFrame{Type: "registered"}); err != nil {
+				log.Printf("relay: failed to send registered ack to %s: %v", client.UUID[:8], err)
+			}
 
 		case "relay":
 			if client == nil {
@@ -124,25 +119,33 @@ func handleClient(conn net.Conn) {
 
 			if online {
 				// Forward message frame directly
-				err := target.Send(RelayFrame{
+				err := target.Send(protocol.RelayFrame{
 					Type:    "msg",
 					UUID:    client.UUID,
 					Message: frame.Message,
 				})
 				if err != nil {
-					log.Printf("Failed to forward message from %s to %s: %v", client.UUID[:8], recipientUUID[:8], err)
-					_ = client.Send(RelayFrame{Type: "offline", Recipient: recipientUUID})
+					log.Printf("relay: failed to forward message from %s to %s: %v", client.UUID[:8], recipientUUID[:8], err)
+					if err := client.Send(protocol.RelayFrame{Type: "offline", Recipient: recipientUUID}); err != nil {
+						log.Printf("relay: failed to send offline notification to %s: %v", client.UUID[:8], err)
+					}
 				}
 			} else {
 				// Recipient is offline, notify sender
-				_ = client.Send(RelayFrame{Type: "offline", Recipient: recipientUUID})
+				if err := client.Send(protocol.RelayFrame{Type: "offline", Recipient: recipientUUID}); err != nil {
+					log.Printf("relay: failed to send offline notification to %s: %v", client.UUID[:8], err)
+				}
 			}
 
 		case "ping":
 			if client != nil {
-				_ = client.Send(RelayFrame{Type: "pong"})
+				if err := client.Send(protocol.RelayFrame{Type: "pong"}); err != nil {
+					log.Printf("relay: failed to send pong to %s: %v", client.UUID[:8], err)
+				}
 			} else {
-				_ = enc.Encode(RelayFrame{Type: "pong"})
+				if err := enc.Encode(protocol.RelayFrame{Type: "pong"}); err != nil {
+					log.Printf("relay: failed to send pong to unregistered client: %v", err)
+				}
 			}
 		}
 	}
