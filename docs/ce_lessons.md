@@ -115,3 +115,21 @@ When completing a debugging task or a major architectural optimization:
   * **NEVER** release `relayMu` between reading `relayEnc` and calling `relayEnc.Encode()`. The mutex must be held for the entire write operation.
   * When adding new methods that write to the relay, use the pattern: `sm.relayMu.Lock(); defer sm.relayMu.Unlock(); sm.relayEnc.Encode(...)`.
   * Do NOT send P2P-only frame types (sync_list, sync_request, sync_response) through the relay. Only send relay-native frame types (relay, search, who_online, ping).
+
+---
+
+### CE-006: Fly.io Deployment Without IP Allocation (Zero Connectivity)
+* **Date:** 2026-06-17
+* **Symptom:** Relay deployed successfully to Fly.io. Health checks passed. But zero clients could connect — `connected=0 registered=0` for the entire 12+ hour lifetime. Users reported TermTalk "not working" with no errors shown.
+* **Root Cause:** The deployment used `fly apps create` + `fly deploy` instead of `fly launch`. The `fly launch` command automatically allocates public IPs (IPv4 + IPv6), but `fly apps create` does NOT. Without public IPs, the `.fly.dev` hostname had no DNS records and no external traffic could reach the app.
+* **Code Change / Fix:**
+  ```bash
+  fly ips allocate-v6           # Free, dedicated
+  fly ips allocate-v4 --shared  # Free, shared Anycast
+  ```
+  After allocation, `termtalk-relay.fly.dev` resolved to both IPv4 (`66.241.124.156`) and IPv6 (`2a09:8280:1::12c:5455:0`), and TCP connections on port 55558 succeeded immediately.
+* **Strict Rule to Prevent Regression:**
+  * After ANY Fly.io deployment, verify `fly ips list` shows at least one public IP.
+  * After ANY Fly.io deployment, verify TCP connectivity: `fly ping` or a manual TCP socket test to the app hostname and port.
+  * Prefer `fly launch` over `fly apps create` + `fly deploy` for new apps — it handles IP allocation, volume creation, and service configuration automatically.
+
