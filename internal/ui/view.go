@@ -149,6 +149,10 @@ func (m Model) viewProfile() string {
 		sb.WriteString(profileStyle.Render("║") + padRight(fmt.Sprintf("  Handle:    %s", handle), boxWidth-2) + profileStyle.Render("║") + "\n")
 		sb.WriteString(profileStyle.Render("║") + padRight(fmt.Sprintf("  Username:  %s", m.LocalUser.Username), boxWidth-2) + profileStyle.Render("║") + "\n")
 		sb.WriteString(profileStyle.Render("║") + padRight(fmt.Sprintf("  UUID:      %s", m.LocalUser.UUID), boxWidth-2) + profileStyle.Render("║") + "\n")
+		fingerprint := m.LocalUser.Fingerprint()
+		if fingerprint != "" {
+			sb.WriteString(profileStyle.Render("║") + padRight(fmt.Sprintf("  Key:       %s", fingerprint), boxWidth-2) + profileStyle.Render("║") + "\n")
+		}
 		sb.WriteString(profileStyle.Render("║") + padRight("", boxWidth-2) + profileStyle.Render("║") + "\n")
 		sb.WriteString(profileStyle.Render("║") + padRight("  Share ID (give this to peers):", boxWidth-2) + profileStyle.Render("║") + "\n")
 		sb.WriteString(profileStyle.Render("║") + "  " + accentTextStyle.Render(shareID) + padRight("", boxWidth-2-2-len(shareID)) + profileStyle.Render("║") + "\n")

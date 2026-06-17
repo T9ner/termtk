@@ -1,14 +1,19 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net"
+	"os"
+	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"termtalk/internal/protocol"
@@ -39,9 +44,10 @@ type StoredMessage struct {
 
 // RegisteredUser tracks a user's registration in the directory.
 type RegisteredUser struct {
-	UUID     string
-	Username string
-	LastSeen time.Time
+	UUID      string
+	Username  string
+	PublicKey string
+	LastSeen  time.Time
 }
 
 // RelayServer encapsulates all relay state and logic.
@@ -52,15 +58,26 @@ type RelayServer struct {
 	storeMu      sync.RWMutex
 	userRegistry map[string]RegisteredUser // uuid → user info
 	registryMu   sync.RWMutex
+	store        *RelayStore // nil = pure in-memory (tests)
 }
 
 // NewRelayServer creates a new relay server instance.
-func NewRelayServer() *RelayServer {
-	return &RelayServer{
+// Pass nil for store to use pure in-memory mode (tests).
+func NewRelayServer(store *RelayStore) *RelayServer {
+	rs := &RelayServer{
 		clients:      make(map[string]*ClientConn),
 		messageStore: make(map[string][]StoredMessage),
 		userRegistry: make(map[string]RegisteredUser),
+		store:        store,
 	}
+	// Load persisted users
+	if store != nil {
+		if users, err := store.LoadUsers(); err == nil {
+			rs.userRegistry = users
+			log.Printf("Loaded %d registered users from database", len(users))
+		}
+	}
+	return rs
 }
 
 // RegisterClient registers a client, sends ack, and flushes stored messages.
@@ -81,6 +98,13 @@ func (rs *RelayServer) RegisterClient(client *ClientConn) {
 	}
 	rs.registryMu.Unlock()
 
+	// Persist user registration to DB
+	if rs.store != nil {
+		if err := rs.store.UpsertUser(client.UUID, client.Username, ""); err != nil {
+			log.Printf("relay: failed to persist user %s: %v", client.UUID[:8], err)
+		}
+	}
+
 	log.Printf("Client registered: %s (%s) from %s", client.Username, client.UUID[:8], client.conn.RemoteAddr())
 
 	// Send registration ack
@@ -88,11 +112,23 @@ func (rs *RelayServer) RegisterClient(client *ClientConn) {
 		log.Printf("relay: failed to send registered ack to %s: %v", client.UUID[:8], err)
 	}
 
-	// Flush stored messages
+	// Flush stored messages — prefer DB, fall back to in-memory
+	var stored []StoredMessage
+	if rs.store != nil {
+		if dbMsgs, err := rs.store.LoadAndDeleteMessages(client.UUID); err == nil {
+			stored = dbMsgs
+		} else {
+			log.Printf("relay: failed to load stored messages from DB for %s: %v", client.UUID[:8], err)
+		}
+	}
+	// Also drain in-memory store (covers race where message was cached but not yet persisted)
 	rs.storeMu.Lock()
-	stored := rs.messageStore[client.UUID]
+	memStored := rs.messageStore[client.UUID]
 	delete(rs.messageStore, client.UUID)
 	rs.storeMu.Unlock()
+	if len(stored) == 0 {
+		stored = memStored
+	}
 
 	for _, sm := range stored {
 		// Deliver each stored message
@@ -162,8 +198,7 @@ func (rs *RelayServer) HandleRelay(sender *ClientConn, frame protocol.RelayFrame
 		}
 
 		// Store for offline recipient
-		rs.storeMu.Lock()
-		rs.messageStore[recipientUUID] = append(rs.messageStore[recipientUUID], StoredMessage{
+		smsg := StoredMessage{
 			SenderUUID:     sender.UUID,
 			SenderUsername: sender.Username,
 			Frame: protocol.RelayFrame{
@@ -173,8 +208,17 @@ func (rs *RelayServer) HandleRelay(sender *ClientConn, frame protocol.RelayFrame
 				MessageID: messageID,
 			},
 			StoredAt: time.Now(),
-		})
+		}
+		rs.storeMu.Lock()
+		rs.messageStore[recipientUUID] = append(rs.messageStore[recipientUUID], smsg)
 		rs.storeMu.Unlock()
+
+		// Persist to DB
+		if rs.store != nil {
+			if err := rs.store.StoreMessage(sender.UUID, sender.Username, recipientUUID, smsg.Frame); err != nil {
+				log.Printf("relay: failed to persist stored message for %s: %v", recipientUUID[:8], err)
+			}
+		}
 
 		// Acknowledge storage to sender
 		if err := sender.Send(protocol.RelayFrame{
@@ -251,6 +295,12 @@ func (rs *RelayServer) RegisteredCount() int {
 
 // StoredMessageCount returns the total number of stored messages across all recipients.
 func (rs *RelayServer) StoredMessageCount() int {
+	// Prefer DB count if available
+	if rs.store != nil {
+		if count, err := rs.store.StoredMessageCount(); err == nil {
+			return count
+		}
+	}
 	rs.storeMu.RLock()
 	defer rs.storeMu.RUnlock()
 	total := 0
@@ -356,7 +406,26 @@ func (rs *RelayServer) handleClient(conn net.Conn) {
 
 func main() {
 	portFlag := flag.Int("port", 55558, "Port to run the relay server on")
+	dataDir := flag.String("data-dir", "", "Directory for persistent data (default: /data if exists, else .)")
 	flag.Parse()
+
+	// Resolve data directory
+	if *dataDir == "" {
+		if info, err := os.Stat("/data"); err == nil && info.IsDir() {
+			*dataDir = "/data"
+		} else {
+			*dataDir = "."
+		}
+	}
+
+	// Initialize SQLite store
+	dbPath := filepath.Join(*dataDir, "relay.db")
+	store, err := NewRelayStore(dbPath)
+	if err != nil {
+		log.Fatalf("Relay Server error: failed to open database %s: %v", dbPath, err)
+	}
+	defer store.Close()
+	log.Printf("Database opened: %s", dbPath)
 
 	listener, err := net.Listen("tcp4", fmt.Sprintf("0.0.0.0:%d", *portFlag))
 	if err != nil {
@@ -364,27 +433,50 @@ func main() {
 	}
 	defer listener.Close()
 
-	rs := NewRelayServer()
+	rs := NewRelayServer(store)
 
-	log.Printf("TermTalk Relay Server v0.3.0 running on port %d...", *portFlag)
-	log.Printf("Features: store-and-forward, user registry, search, presence")
+	log.Printf("TermTalk Relay Server v0.4.0 running on port %d...", *portFlag)
+	log.Printf("Features: store-and-forward, user registry, search, presence, SQLite persistence")
+
+	// Graceful shutdown on SIGTERM/SIGINT
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	// Periodic health check logging for deployment monitoring
 	go func() {
 		ticker := time.NewTicker(60 * time.Second)
 		defer ticker.Stop()
-		for range ticker.C {
-			log.Printf("[health] connected=%d registered=%d stored_msgs=%d",
-				rs.ConnectedCount(), rs.RegisteredCount(), rs.StoredMessageCount())
+		for {
+			select {
+			case <-ticker.C:
+				log.Printf("[health] connected=%d registered=%d stored_msgs=%d",
+					rs.ConnectedCount(), rs.RegisteredCount(), rs.StoredMessageCount())
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Printf("Connection accept error: %v", err)
-			continue
+	// Accept connections until shutdown signal
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					log.Printf("Connection accept error: %v", err)
+					continue
+				}
+			}
+			go rs.handleClient(conn)
 		}
-		go rs.handleClient(conn)
-	}
+	}()
+
+	<-ctx.Done()
+	log.Printf("Shutting down relay server...")
+	listener.Close()
+	store.Close()
+	log.Printf("Relay server stopped.")
 }
