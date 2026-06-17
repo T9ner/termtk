@@ -87,6 +87,7 @@ type SyncManager struct {
 	OnSearchResult func(users []protocol.UserInfo)
 	OnOnlineList   func(users []protocol.UserInfo)
 	OnReadAck      func(senderUUID string, messageIDs []string)
+	OnUserList     func(users []protocol.UserInfo)
 }
 
 // DefaultRelayAddr is the public TermTalk relay node hosted on Fly.io
@@ -834,6 +835,10 @@ func (sm *SyncManager) relayLoop(ctx context.Context) {
 						if sm.OnOnlineList != nil {
 							sm.OnOnlineList(frame.Users)
 						}
+					case "user_list":
+						if sm.OnUserList != nil {
+							sm.OnUserList(frame.Users)
+						}
 					case "read_ack":
 						if sm.OnReadAck != nil {
 							sm.OnReadAck(frame.UUID, frame.MessageIDs)
@@ -971,6 +976,17 @@ func (sm *SyncManager) SendWhoOnline() error {
 	return sm.relayEnc.Encode(protocol.RelayFrame{
 		Type: "who_online",
 	})
+}
+
+// SendListUsers requests the full user directory from the relay server.
+// CE-005: relayMu is held for the entire Encode() call.
+func (sm *SyncManager) SendListUsers() error {
+	sm.relayMu.Lock()
+	defer sm.relayMu.Unlock()
+	if !sm.relayOnline || sm.relayEnc == nil {
+		return fmt.Errorf("relay offline")
+	}
+	return sm.relayEnc.Encode(protocol.RelayFrame{Type: "list_users"})
 }
 
 // SendReadAck sends a batch read receipt to the relay for forwarding to the original sender.

@@ -35,6 +35,11 @@ type OnlineListEvent struct{ Users []protocol.UserInfo }
 
 func (OnlineListEvent) isEvent() {}
 
+// UserListEvent is fired when the full user directory arrives from the relay.
+type UserListEvent struct{ Users []protocol.UserInfo }
+
+func (UserListEvent) isEvent() {}
+
 // ReadAckEvent is fired when a read receipt arrives from a contact.
 type ReadAckEvent struct {
 	SenderUUID string
@@ -94,6 +99,9 @@ func New(dbPath string, tcpPort int) (*Client, error) {
 	}
 	c.syncMgr.OnReadAck = func(senderUUID string, messageIDs []string) {
 		c.events <- ReadAckEvent{SenderUUID: senderUUID, MessageIDs: messageIDs}
+	}
+	c.syncMgr.OnUserList = func(users []protocol.UserInfo) {
+		c.events <- UserListEvent{Users: users}
 	}
 
 	return c, nil
@@ -293,6 +301,12 @@ func (c *Client) SearchUsers(query string) error {
 // Results arrive asynchronously as an OnlineListEvent on the Events channel.
 func (c *Client) GetOnlineUsers() error {
 	return c.syncMgr.SendWhoOnline()
+}
+
+// ListUsers requests the full user directory from the relay.
+// Results arrive asynchronously as a UserListEvent on the Events channel.
+func (c *Client) ListUsers() error {
+	return c.syncMgr.SendListUsers()
 }
 
 // SendReadAck sends a batch read receipt to the message sender via the relay.

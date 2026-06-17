@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"termtalk/internal/db"
@@ -107,6 +108,8 @@ func (m Model) View() string {
 		return m.viewHelp()
 	case StateVerify:
 		return m.viewVerify()
+	case StateUserList:
+		return m.viewUserList()
 	default:
 		return "Unknown app state."
 	}
@@ -518,6 +521,7 @@ func (m Model) viewHelp() string {
 	writeKey("Ctrl+V", "Verify contact")
 	writeKey("Ctrl+P", "View your profile")
 	writeKey("Ctrl+X", "Delete last sent message")
+	writeKey("Ctrl+L", "User directory")
 	sb.WriteString("\n")
 
 	writeSection("Sync")
@@ -571,5 +575,67 @@ func (m Model) viewVerify() string {
 
 	sb.WriteString("\n")
 	sb.WriteString(footerStyle.Render("v: Verify  ·  u: Unverify  ·  Esc: Back"))
+	return sb.String()
+}
+
+func formatTimeAgo(t time.Time) string {
+	diff := time.Since(t)
+	switch {
+	case diff < time.Minute:
+		return "just now"
+	case diff < time.Hour:
+		return fmt.Sprintf("%dm ago", int(diff.Minutes()))
+	case diff < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(diff.Hours()))
+	default:
+		return fmt.Sprintf("%dd ago", int(diff.Hours()/24))
+	}
+}
+
+func (m Model) viewUserList() string {
+	var sb strings.Builder
+	sb.WriteString("\n")
+	sb.WriteString(titleStyle.Render(" User Directory "))
+	sb.WriteString("\n\n")
+
+	if len(m.UserList) == 0 {
+		sb.WriteString("  Loading users...\n")
+		sb.WriteString("\n")
+		sb.WriteString(footerStyle.Render("Esc: Back"))
+		return sb.String()
+	}
+
+	accentTextStyle := lipgloss.NewStyle().Foreground(accentColor).Bold(true)
+	grayText := lipgloss.NewStyle().Foreground(grayColor)
+
+	sb.WriteString(accentTextStyle.Render(fmt.Sprintf("  %d registered users", len(m.UserList))))
+	sb.WriteString("\n")
+	sb.WriteString("  " + strings.Repeat("─", 40) + "\n")
+
+	for i, u := range m.UserList {
+		status := offlineBadge.Render("○")
+		if u.Online {
+			status = onlineBadge.Render("●")
+		}
+
+		lastSeen := ""
+		if u.LastSeen != "" {
+			if t, err := time.Parse(time.RFC3339, u.LastSeen); err == nil {
+				lastSeen = grayText.Render(" · " + formatTimeAgo(t))
+			}
+		}
+
+		line := fmt.Sprintf("  %s @%s%s", status, u.Username, lastSeen)
+
+		if i == m.UserListSelected {
+			sb.WriteString(selectedStyle.Render(line) + "\n")
+		} else {
+			sb.WriteString(normalContactStyle.Render(line) + "\n")
+		}
+	}
+
+	sb.WriteString("  " + strings.Repeat("─", 40) + "\n")
+	sb.WriteString("\n")
+	sb.WriteString(footerStyle.Render("↑↓: Navigate | Enter: Add as contact | Esc: Back"))
 	return sb.String()
 }
