@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"termtalk/internal/db"
 )
 
 var (
@@ -104,6 +105,8 @@ func (m Model) View() string {
 		return m.viewSearch()
 	case StateHelp:
 		return m.viewHelp()
+	case StateVerify:
+		return m.viewVerify()
 	default:
 		return "Unknown app state."
 	}
@@ -267,7 +270,12 @@ func (m Model) viewDashboard() string {
 				contactName = lipgloss.NewStyle().Bold(true).Render(contactName)
 			}
 
-			line := fmt.Sprintf("%s %s%s", badge, contactName, unreadStr)
+			verifiedBadge := ""
+			if c.Verified {
+				verifiedBadge = " ✓"
+			}
+
+			line := fmt.Sprintf("%s %s%s%s", badge, contactName, unreadStr, verifiedBadge)
 			if i == m.SelectedIdx {
 				sidebarBuilder.WriteString(selectedStyle.Render(line) + "\n")
 			} else {
@@ -507,7 +515,9 @@ func (m Model) viewHelp() string {
 	writeKey("Ctrl+F", "Find users on relay")
 	writeKey("Ctrl+N", "Add contact manually")
 	writeKey("Del/Ctrl+D", "Delete selected contact")
+	writeKey("Ctrl+V", "Verify contact")
 	writeKey("Ctrl+P", "View your profile")
+	writeKey("Ctrl+X", "Delete last sent message")
 	sb.WriteString("\n")
 
 	writeSection("Sync")
@@ -516,5 +526,50 @@ func (m Model) viewHelp() string {
 	sb.WriteString("\n")
 
 	sb.WriteString(footerStyle.Render("  Press Esc or ? to close"))
+	return sb.String()
+}
+
+func (m Model) viewVerify() string {
+	var sb strings.Builder
+	sb.WriteString("\n")
+	sb.WriteString(titleStyle.Render(" Verify Contact "))
+	sb.WriteString("\n\n")
+
+	if m.SelectedIdx < 0 || m.SelectedIdx >= len(m.Contacts) {
+		sb.WriteString("  No contact selected.\n")
+		sb.WriteString("\n")
+		sb.WriteString(footerStyle.Render("Esc: Back"))
+		return sb.String()
+	}
+
+	contact := m.Contacts[m.SelectedIdx]
+
+	if len(contact.PublicKey) == 0 || m.LocalUser == nil || len(m.LocalUser.PublicKey) == 0 {
+		sb.WriteString("  Cannot verify — no cryptographic keys available.\n")
+		sb.WriteString("  Both you and your contact need v0.4.0+ for verification.\n")
+		sb.WriteString("\n")
+		sb.WriteString(footerStyle.Render("Esc: Back"))
+		return sb.String()
+	}
+
+	code := db.VerificationCode(m.LocalUser.PublicKey, contact.PublicKey)
+
+	accentTextStyle := lipgloss.NewStyle().Foreground(accentColor).Bold(true)
+	grayText := lipgloss.NewStyle().Foreground(grayColor)
+
+	sb.WriteString(fmt.Sprintf("  Contact: @%s\n\n", contact.Username))
+	sb.WriteString("  Your verification code:\n\n")
+	sb.WriteString("    " + accentTextStyle.Render(fmt.Sprintf("  %s  %s  ", code[:3], code[3:])) + "\n\n")
+	sb.WriteString(grayText.Render("  Ask your contact to open this screen (Ctrl+V).\n"))
+	sb.WriteString(grayText.Render("  If their code matches, press 'v' to mark as verified.\n"))
+	sb.WriteString(grayText.Render("  If it doesn't match, press 'u' to mark as unverified.\n"))
+
+	if contact.Verified {
+		sb.WriteString("\n")
+		sb.WriteString("  " + accentTextStyle.Render("✓ This contact is verified") + "\n")
+	}
+
+	sb.WriteString("\n")
+	sb.WriteString(footerStyle.Render("v: Verify  ·  u: Unverify  ·  Esc: Back"))
 	return sb.String()
 }

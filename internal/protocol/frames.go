@@ -22,24 +22,29 @@ import "encoding/json"
 //   - "delivered"      — relay→client: stored message was delivered to recipient
 //   - "flush"          — relay→client: delivering stored messages on reconnect
 //   - "read_ack"       — client→relay→client: batch read receipt for messages
+//   - "delete"         — client→relay→client: delete messages by ID
 type RelayFrame struct {
-	Type       string          `json:"type"`                  // Frame type identifier
-	UUID       string          `json:"uuid,omitempty"`        // Client registration UUID
-	Username   string          `json:"username,omitempty"`    // Client registration Username
-	Recipient  string          `json:"recipient,omitempty"`   // Target Recipient UUID
-	Message    json.RawMessage `json:"message,omitempty"`     // Nested Frame payload
-	Query      string          `json:"query,omitempty"`       // Search query string
-	Users      []UserInfo      `json:"users,omitempty"`       // Search/online results
-	MessageID  string          `json:"message_id,omitempty"`  // For stored/delivered acks
-	MessageIDs []string        `json:"message_ids,omitempty"` // For read_ack batches
-	PublicKey  string          `json:"public_key,omitempty"`  // Base64 Ed25519 public key
-	Signature  string          `json:"signature,omitempty"`   // Base64 Ed25519 signature
+	Type            string          `json:"type"`                        // Frame type identifier
+	UUID            string          `json:"uuid,omitempty"`              // Client registration UUID
+	Username        string          `json:"username,omitempty"`          // Client registration Username
+	Recipient       string          `json:"recipient,omitempty"`         // Target Recipient UUID
+	Message         json.RawMessage `json:"message,omitempty"`           // Nested Frame payload
+	Query           string          `json:"query,omitempty"`             // Search query string
+	Users           []UserInfo      `json:"users,omitempty"`             // Search/online results
+	MessageID       string          `json:"message_id,omitempty"`        // For stored/delivered acks
+	MessageIDs      []string        `json:"message_ids,omitempty"`       // For read_ack batches
+	PublicKey       string          `json:"public_key,omitempty"`        // Base64 Ed25519 public key
+	Signature       string          `json:"signature,omitempty"`         // Base64 Ed25519 signature
+	Encrypted       bool            `json:"encrypted,omitempty"`         // True if Message payload is NaCl box encrypted
+	Nonce           string          `json:"nonce,omitempty"`             // Base64 NaCl box nonce (24 bytes)
+	X25519PublicKey string          `json:"x25519_public_key,omitempty"` // Base64 X25519 public key for encryption
 }
 
 // UserInfo represents a user in search/online results.
 type UserInfo struct {
-	UUID      string `json:"uuid"`
-	Username  string `json:"username"`
-	Online    bool   `json:"online"`
-	PublicKey string `json:"public_key,omitempty"` // Base64 Ed25519 public key
+	UUID            string `json:"uuid"`
+	Username        string `json:"username"`
+	Online          bool   `json:"online"`
+	PublicKey       string `json:"public_key,omitempty"`        // Base64 Ed25519 public key
+	X25519PublicKey string `json:"x25519_public_key,omitempty"` // Base64 X25519 public key
 }

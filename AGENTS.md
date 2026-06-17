@@ -104,5 +104,6 @@ Update parent docs when parent-level structure, ownership, workflow, or child in
   - [internal/client/AGENTS.md](file:///C:/Users/HP/Desktop/termtk/internal/client/AGENTS.md) — Client Facade coordinating db, network, and events
   - [internal/protocol/AGENTS.md](file:///C:/Users/HP/Desktop/termtk/internal/protocol/AGENTS.md) — Shared wire-format types (RelayFrame)
   - [internal/ui/AGENTS.md](file:///C:/Users/HP/Desktop/termtk/internal/ui/AGENTS.md) — Bubble Tea TUI: model, update, view
+  - [internal/crypto/AGENTS.md](file:///C:/Users/HP/Desktop/termtk/internal/crypto/AGENTS.md) — NaCl box E2E encryption, X25519 key derivation
 - [docs/AGENTS.md](file:///C:/Users/HP/Desktop/termtk/docs/AGENTS.md) — ADRs, CE lessons, domain vocabulary, triage
 - [.agents/skills/AGENTS.md](file:///C:/Users/HP/Desktop/termtk/.agents/skills/AGENTS.md) — Installed and custom agent skills
