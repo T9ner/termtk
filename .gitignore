@@ -6,3 +6,13 @@
 # Databases
 *.db
 !*.db-journal
+
+# Agent/context docs (already tracked — gitignore prevents new matches only)
+AGENTS.md
+**/AGENTS.md
+CLAUDE.md
+CONTEXT.md
+
+# Agent tooling and scratch files — NEVER publish
+.agents/
+.scratch/
