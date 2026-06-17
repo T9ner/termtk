@@ -10,7 +10,7 @@ Package `network` handles all network communication for TermTalk — real-time p
 ## Ownership
 
 - [discovery.go](file:///C:/Users/HP/Desktop/termtk/internal/network/discovery.go): UDP broadcast daemon for auto-detecting peers on local Wi-Fi (`DiscoveryPort` 55555)
-- [sync.go](file:///C:/Users/HP/Desktop/termtk/internal/network/sync.go): TCP sync manager — peer handshakes, message history negotiation, relay client lifecycle, keepalive heartbeat, search/who_online requests, store-and-forward ack handling (stored/delivered), outbox drain on reconnect, read receipt send/receive (`SendReadAck`, `OnReadAck`)
+- [sync.go](file:///C:/Users/HP/Desktop/termtk/internal/network/sync.go): TCP sync manager — peer handshakes, message history negotiation, relay client lifecycle, keepalive heartbeat, search/who_online requests, store-and-forward ack handling (stored/delivered), outbox drain on reconnect, read receipt send/receive (`SendReadAck`, `OnReadAck`), Ed25519 message signing (`sendRelayFrame`) and signature verification (`handleRelayFrame`, warn-only v0.4.0)
 
 ## Local Contracts
 

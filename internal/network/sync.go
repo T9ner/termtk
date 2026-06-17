@@ -2,6 +2,7 @@ package network
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -58,6 +59,8 @@ func (pc *PeerConnection) Close() error {
 type SyncManager struct {
 	localUUID  string
 	username   string
+	publicKey  []byte
+	privateKey []byte
 	db         *db.Database
 	tcpPort    int
 	listener   net.Listener
@@ -107,11 +110,13 @@ func (sm *SyncManager) SetRelayAddr(addr string) {
 }
 
 // UpdateCredentials updates the profile credentials thread-safely after registration.
-func (sm *SyncManager) UpdateCredentials(uuid, username string) {
+func (sm *SyncManager) UpdateCredentials(uuid, username string, publicKey, privateKey []byte) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.localUUID = uuid
 	sm.username = username
+	sm.publicKey = publicKey
+	sm.privateKey = privateKey
 }
 
 // getLocalUUID safely reads localUUID under lock.
@@ -322,11 +327,27 @@ func (sm *SyncManager) SyncHistory(pc *PeerConnection) {
 
 // sendRelayFrame encapsulates and sends a Frame to the relay server.
 // The relayMu is held for the entire Encode() call to prevent concurrent writes (CE-002).
+// If private key is available, the payload is signed with Ed25519.
 func (sm *SyncManager) sendRelayFrame(recipientUUID string, f Frame) error {
 	payload, err := json.Marshal(f)
 	if err != nil {
 		return err
 	}
+
+	relayFrame := protocol.RelayFrame{
+		Type:      "relay",
+		Recipient: recipientUUID,
+		Message:   payload,
+	}
+
+	// Sign the payload with Ed25519 if keys are available
+	sm.mu.Lock()
+	if len(sm.privateKey) > 0 && len(sm.publicKey) > 0 {
+		p := &db.Profile{PrivateKey: sm.privateKey}
+		relayFrame.Signature = base64.StdEncoding.EncodeToString(p.Sign(payload))
+		relayFrame.PublicKey = base64.StdEncoding.EncodeToString(sm.publicKey)
+	}
+	sm.mu.Unlock()
 
 	sm.relayMu.Lock()
 	defer sm.relayMu.Unlock()
@@ -335,11 +356,7 @@ func (sm *SyncManager) sendRelayFrame(recipientUUID string, f Frame) error {
 		return fmt.Errorf("relay offline")
 	}
 
-	return sm.relayEnc.Encode(protocol.RelayFrame{
-		Type:      "relay",
-		Recipient: recipientUUID,
-		Message:   payload,
-	})
+	return sm.relayEnc.Encode(relayFrame)
 }
 
 // acceptLoop accepts incoming local TCP connections.
@@ -613,6 +630,11 @@ func (sm *SyncManager) relayLoop(ctx context.Context) {
 				UUID:     localUUID,
 				Username: username,
 			}
+			sm.mu.Lock()
+			if len(sm.publicKey) > 0 {
+				reg.PublicKey = base64.StdEncoding.EncodeToString(sm.publicKey)
+			}
+			sm.mu.Unlock()
 			if err := enc.Encode(reg); err != nil {
 				conn.Close()
 				time.Sleep(2 * time.Second)
@@ -680,6 +702,16 @@ func (sm *SyncManager) relayLoop(ctx context.Context) {
 					case "msg":
 						var inner Frame
 						if err := json.Unmarshal(frame.Message, &inner); err == nil {
+							// Verify Ed25519 signature if present (warn-only in v0.4.0)
+							if frame.Signature != "" && frame.PublicKey != "" {
+								pubKeyBytes, pkErr := base64.StdEncoding.DecodeString(frame.PublicKey)
+								sigBytes, sigErr := base64.StdEncoding.DecodeString(frame.Signature)
+								if pkErr != nil || sigErr != nil {
+									log.Printf("sync: invalid base64 in signature/public_key from %s", frame.UUID)
+								} else if !db.Verify(pubKeyBytes, frame.Message, sigBytes) {
+									log.Printf("sync: WARNING: invalid Ed25519 signature from %s", frame.UUID)
+								}
+							}
 							sm.handleRelayFrame(frame.UUID, inner)
 						}
 					case "stored":

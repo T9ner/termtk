@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"sync"
 	"time"
@@ -151,7 +152,7 @@ func (c *Client) Register(username string) (*db.Profile, error) {
 	c.profile = p
 	c.mu.Unlock()
 
-	c.syncMgr.UpdateCredentials(p.UUID, p.Username)
+	c.syncMgr.UpdateCredentials(p.UUID, p.Username, p.PublicKey, p.PrivateKey)
 	c.discovery.UpdateCredentials(p.UUID, p.Username)
 
 	return p, nil
@@ -168,7 +169,7 @@ func (c *Client) Start(ctx context.Context) error {
 		return fmt.Errorf("client: cannot start networking without a registered profile")
 	}
 
-	c.syncMgr.UpdateCredentials(p.UUID, p.Username)
+	c.syncMgr.UpdateCredentials(p.UUID, p.Username, p.PublicKey, p.PrivateKey)
 	c.discovery.UpdateCredentials(p.UUID, p.Username)
 
 	if err := c.syncMgr.Start(ctx); err != nil {
@@ -187,6 +188,17 @@ func (c *Client) Stop() {
 	c.syncMgr.Stop()
 	c.discovery.Stop()
 	c.db.Close()
+}
+
+// GetPublicKeyBase64 returns the base64-encoded Ed25519 public key, or empty if not set.
+func (c *Client) GetPublicKeyBase64() string {
+	c.mu.RLock()
+	p := c.profile
+	c.mu.RUnlock()
+	if p == nil || len(p.PublicKey) == 0 {
+		return ""
+	}
+	return base64.StdEncoding.EncodeToString(p.PublicKey)
 }
 
 // Events returns the read-only channel of domain events (PeerDiscoveredEvent,

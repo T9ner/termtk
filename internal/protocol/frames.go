@@ -32,11 +32,14 @@ type RelayFrame struct {
 	Users      []UserInfo      `json:"users,omitempty"`       // Search/online results
 	MessageID  string          `json:"message_id,omitempty"`  // For stored/delivered acks
 	MessageIDs []string        `json:"message_ids,omitempty"` // For read_ack batches
+	PublicKey  string          `json:"public_key,omitempty"`  // Base64 Ed25519 public key
+	Signature  string          `json:"signature,omitempty"`   // Base64 Ed25519 signature
 }
 
 // UserInfo represents a user in search/online results.
 type UserInfo struct {
-	UUID     string `json:"uuid"`
-	Username string `json:"username"`
-	Online   bool   `json:"online"`
+	UUID      string `json:"uuid"`
+	Username  string `json:"username"`
+	Online    bool   `json:"online"`
+	PublicKey string `json:"public_key,omitempty"` // Base64 Ed25519 public key
 }

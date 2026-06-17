@@ -78,7 +78,7 @@ func (tc *testClient) readFrame(t *testing.T, timeout time.Duration) protocol.Re
 // ─── Store-and-Forward Tests ───────────────────────────────────────────────────
 
 func TestStoreMessageForOfflineRecipient(t *testing.T) {
-	rs := NewRelayServer()
+	rs := NewRelayServer(nil)
 
 	alice := makeTestClient(t, "alice-uuid", "alice")
 	defer alice.Close()
@@ -122,7 +122,7 @@ func TestStoreMessageForOfflineRecipient(t *testing.T) {
 }
 
 func TestFlushStoredMessagesOnReconnect(t *testing.T) {
-	rs := NewRelayServer()
+	rs := NewRelayServer(nil)
 
 	alice := makeTestClient(t, "alice-uuid", "alice")
 	defer alice.Close()
@@ -175,7 +175,7 @@ func TestFlushStoredMessagesOnReconnect(t *testing.T) {
 }
 
 func TestDeliveryReceiptSentToSender(t *testing.T) {
-	rs := NewRelayServer()
+	rs := NewRelayServer(nil)
 
 	alice := makeTestClient(t, "alice-uuid", "alice")
 	defer alice.Close()
@@ -222,7 +222,7 @@ func TestDeliveryReceiptSentToSender(t *testing.T) {
 }
 
 func TestNoStoreWhenRecipientOnline(t *testing.T) {
-	rs := NewRelayServer()
+	rs := NewRelayServer(nil)
 
 	alice := makeTestClient(t, "alice-uuid", "alice")
 	defer alice.Close()
@@ -268,7 +268,7 @@ func TestNoStoreWhenRecipientOnline(t *testing.T) {
 // ─── User Registry & Search Tests ──────────────────────────────────────────────
 
 func TestSearchFindsRegisteredUser(t *testing.T) {
-	rs := NewRelayServer()
+	rs := NewRelayServer(nil)
 
 	alice := makeTestClient(t, "alice-uuid", "alice_wonder")
 	defer alice.Close()
@@ -302,7 +302,7 @@ func TestSearchFindsRegisteredUser(t *testing.T) {
 }
 
 func TestSearchReturnsOnlineStatus(t *testing.T) {
-	rs := NewRelayServer()
+	rs := NewRelayServer(nil)
 
 	alice := makeTestClient(t, "alice-uuid", "alice")
 	defer alice.Close()
@@ -349,7 +349,7 @@ func TestSearchReturnsOnlineStatus(t *testing.T) {
 }
 
 func TestWhoOnlineReturnsConnectedUsers(t *testing.T) {
-	rs := NewRelayServer()
+	rs := NewRelayServer(nil)
 
 	alice := makeTestClient(t, "alice-uuid", "alice")
 	defer alice.Close()
@@ -380,7 +380,7 @@ func TestWhoOnlineReturnsConnectedUsers(t *testing.T) {
 }
 
 func TestSearchEmptyQueryReturnsAll(t *testing.T) {
-	rs := NewRelayServer()
+	rs := NewRelayServer(nil)
 
 	alice := makeTestClient(t, "alice-uuid", "alice")
 	defer alice.Close()
