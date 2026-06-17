@@ -249,6 +249,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.SearchResults = nil
 				m.SearchSelectedIdx = 0
 
+			case tea.KeyCtrlD:
+				if m.Focus == FocusSidebar && m.SelectedIdx >= 0 && m.SelectedIdx < len(m.Contacts) {
+					contact := m.Contacts[m.SelectedIdx]
+					m.ConfirmAction = "delete_contact"
+					m.ConfirmTarget = contact.UUID
+					m.SetStatus(fmt.Sprintf("Delete @%s? (y/n)", contact.Username), 30*time.Second)
+				}
+
 			case tea.KeyUp:
 				if m.Focus == FocusSidebar {
 					if m.SelectedIdx > 0 {
@@ -290,6 +298,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 			default:
+				// Handle confirmation dialog responses
+				if m.ConfirmAction != "" {
+					if msg.String() == "y" || msg.String() == "Y" {
+						switch m.ConfirmAction {
+						case "delete_contact":
+							if err := m.Client.DeleteContact(m.ConfirmTarget); err != nil {
+								m.SetStatus(fmt.Sprintf("Failed to delete: %v", err), 3*time.Second)
+							} else {
+								m.SetStatus("Contact deleted.", 3*time.Second)
+								m.RefreshContacts()
+								if m.SelectedIdx >= len(m.Contacts) {
+									m.SelectedIdx = len(m.Contacts) - 1
+								}
+								if m.SelectedIdx >= 0 {
+									m.ReloadMessages()
+								} else {
+									m.ChatHistory = nil
+									m.Viewport.SetContent("Select a contact to start messaging.")
+								}
+							}
+						}
+					} else {
+						m.SetStatus("Cancelled.", 2*time.Second)
+					}
+					m.ConfirmAction = ""
+					m.ConfirmTarget = ""
+					return m, nil
+				}
+
+				// '?' opens help overlay (only when not typing in chat)
+				if m.Focus == FocusSidebar && msg.String() == "?" {
+					m.State = StateHelp
+					return m, nil
+				}
+
 				if m.Focus == FocusChat {
 					// Forward input keypresses to active chat input
 					var cmd tea.Cmd
@@ -441,6 +484,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if query != "" {
 					_ = m.Client.SearchUsers(query)
 				}
+			}
+
+		case StateHelp:
+			if msg.Type == tea.KeyEsc || msg.String() == "?" {
+				m.State = StateDashboard
+				if m.Focus == FocusChat {
+					m.MsgInput.Focus()
+				}
+				return m, nil
 			}
 		}
 
