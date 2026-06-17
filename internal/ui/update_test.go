@@ -329,6 +329,7 @@ func TestView_AllStates_NoPanic(t *testing.T) {
 		StateAddContact,
 		StateSearch,
 		StateHelp,
+		StateVerify,
 	}
 
 	for _, state := range states {

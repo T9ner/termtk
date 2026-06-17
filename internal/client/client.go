@@ -152,7 +152,7 @@ func (c *Client) Register(username string) (*db.Profile, error) {
 	c.profile = p
 	c.mu.Unlock()
 
-	c.syncMgr.UpdateCredentials(p.UUID, p.Username, p.PublicKey, p.PrivateKey)
+	c.syncMgr.UpdateCredentials(p.UUID, p.Username, p.PublicKey, p.PrivateKey, p.X25519PublicKey)
 	c.discovery.UpdateCredentials(p.UUID, p.Username)
 
 	return p, nil
@@ -169,7 +169,7 @@ func (c *Client) Start(ctx context.Context) error {
 		return fmt.Errorf("client: cannot start networking without a registered profile")
 	}
 
-	c.syncMgr.UpdateCredentials(p.UUID, p.Username, p.PublicKey, p.PrivateKey)
+	c.syncMgr.UpdateCredentials(p.UUID, p.Username, p.PublicKey, p.PrivateKey, p.X25519PublicKey)
 	c.discovery.UpdateCredentials(p.UUID, p.Username)
 
 	if err := c.syncMgr.Start(ctx); err != nil {
@@ -317,4 +317,22 @@ func (c *Client) GetUnreadCount(contactUUID string) (int, error) {
 // MarkMessagesRead marks a batch of messages as read in the database.
 func (c *Client) MarkMessagesRead(messageIDs []string) error {
 	return c.db.MarkMessagesRead(messageIDs)
+}
+
+// SetContactVerified sets the verified flag for a contact.
+func (c *Client) SetContactVerified(uuid string, verified bool) error {
+	return c.db.SetContactVerified(uuid, verified)
+}
+
+// DeleteMessagesLocal removes messages from local DB only (delete for me).
+func (c *Client) DeleteMessagesLocal(messageIDs []string) error {
+	return c.db.DeleteMessages(messageIDs)
+}
+
+// DeleteMessagesForEveryone sends a delete frame via relay and removes locally.
+func (c *Client) DeleteMessagesForEveryone(contactUUID string, messageIDs []string) error {
+	if err := c.syncMgr.SendDeleteRequest(contactUUID, messageIDs); err != nil {
+		return err
+	}
+	return c.db.DeleteMessages(messageIDs)
 }

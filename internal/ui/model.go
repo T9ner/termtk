@@ -19,6 +19,7 @@ const (
 	StateProfile
 	StateSearch
 	StateHelp
+	StateVerify
 )
 
 // FocusMode indicates which pane has keyboard focus on the dashboard.
