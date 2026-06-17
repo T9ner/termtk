@@ -20,6 +20,7 @@ const (
 	StateSearch
 	StateHelp
 	StateVerify
+	StateUserList
 )
 
 // FocusMode indicates which pane has keyboard focus on the dashboard.
@@ -75,6 +76,10 @@ type Model struct {
 	// Unread and presence state
 	UnreadCounts map[string]int               // contactUUID → unread count
 	OnlineUsers  map[string]protocol.UserInfo // uuid → presence info
+
+	// User directory state
+	UserList         []protocol.UserInfo
+	UserListSelected int
 }
 
 // NewModel initializes the Bubble Tea model with the Client reference.

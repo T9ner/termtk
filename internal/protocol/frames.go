@@ -18,6 +18,8 @@ import "encoding/json"
 //   - "search_result"  — relay→client: list of matching users
 //   - "who_online"     — client→relay: request list of online users
 //   - "online_list"    — relay→client: list of online users
+//   - "list_users"     — client→relay: request full user directory
+//   - "user_list"      — relay→client: full user directory response
 //   - "stored"         — relay→client: message was stored for offline recipient
 //   - "delivered"      — relay→client: stored message was delivered to recipient
 //   - "flush"          — relay→client: delivering stored messages on reconnect
@@ -40,11 +42,12 @@ type RelayFrame struct {
 	X25519PublicKey string          `json:"x25519_public_key,omitempty"` // Base64 X25519 public key for encryption
 }
 
-// UserInfo represents a user in search/online results.
+// UserInfo represents a user in search/online/directory results.
 type UserInfo struct {
 	UUID            string `json:"uuid"`
 	Username        string `json:"username"`
 	Online          bool   `json:"online"`
+	LastSeen        string `json:"last_seen,omitempty"`         // ISO 8601 timestamp
 	PublicKey       string `json:"public_key,omitempty"`        // Base64 Ed25519 public key
 	X25519PublicKey string `json:"x25519_public_key,omitempty"` // Base64 X25519 public key
 }

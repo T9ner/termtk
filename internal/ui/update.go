@@ -267,6 +267,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.SetStatus(fmt.Sprintf("Delete @%s? (y/n)", contact.Username), 30*time.Second)
 				}
 
+			case tea.KeyCtrlL:
+				m.State = StateUserList
+				m.UserList = nil
+				m.UserListSelected = 0
+				if err := m.Client.ListUsers(); err != nil {
+					m.SetStatus(fmt.Sprintf("Failed: %v", err), 3*time.Second)
+				}
+
 			case tea.KeyCtrlX:
 				if m.Focus == FocusChat && m.SelectedIdx >= 0 && m.SelectedIdx < len(m.Contacts) && m.LocalUser != nil {
 					// Find the last message sent by the local user
@@ -570,8 +578,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
-		}
 
+		case StateUserList:
+			switch msg.Type {
+			case tea.KeyEsc:
+				m.State = StateDashboard
+				if m.Focus == FocusChat {
+					m.MsgInput.Focus()
+				}
+				return m, nil
+			case tea.KeyUp:
+				if m.UserListSelected > 0 {
+					m.UserListSelected--
+				}
+			case tea.KeyDown:
+				if m.UserListSelected < len(m.UserList)-1 {
+					m.UserListSelected++
+				}
+			case tea.KeyEnter:
+				if len(m.UserList) > 0 && m.UserListSelected >= 0 && m.UserListSelected < len(m.UserList) {
+					user := m.UserList[m.UserListSelected]
+					if m.LocalUser != nil && user.UUID == m.LocalUser.UUID {
+						m.SetStatus("That's you!", 2*time.Second)
+					} else {
+						err := m.Client.AddContact(user.Username, user.UUID)
+						if err != nil {
+							m.SetStatus(fmt.Sprintf("Failed: %v", err), 3*time.Second)
+						} else {
+							m.SetStatus(fmt.Sprintf("Added @%s", user.Username), 3*time.Second)
+							m.RefreshContacts()
+						}
+						m.State = StateDashboard
+						if m.Focus == FocusChat {
+							m.MsgInput.Focus()
+						}
+					}
+				}
+			}
+		}
 	case client.PeerDiscoveredEvent:
 		m.RefreshContacts()
 		// Try to connect directly to peer over TCP if discovered
@@ -614,6 +658,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.OnlineUsers = newMap
 		// Re-trigger listener
+		cmds = append(cmds, m.ListenForEvents())
+
+	case client.UserListEvent:
+		m.UserList = msg.Users
+		m.UserListSelected = 0
 		cmds = append(cmds, m.ListenForEvents())
 
 	case client.ReadAckEvent:

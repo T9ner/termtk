@@ -9,9 +9,9 @@ Package `ui` implements the terminal user interface using [Bubble Tea](https://g
 
 ## Ownership
 
-- [model.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/model.go): `Model` struct, `NewModel()`, `Init()` — state initialization, text inputs, `FocusMode` type, `AppState` constants, `SearchResult` local type, `UnreadCounts` map, `OnlineUsers` presence map, `ConfirmAction`/`ConfirmTarget` for confirmation dialogs
-- [update.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/update.go): `Update()` — Elm Architecture message loop, keyboard handling, shortcut commands, focus-aware input routing, `RefreshUnreadCounts()`, `sendReadReceipts()`, `PresenceTickMsg` (30s online presence polling), simplified 3-state message status display (`[Queued]`/`[✓]`/`[✓✓]`), 🔒 encryption indicator for E2E encrypted messages (US-3), `Ctrl+D` delete-contact with y/n confirmation dialog, `Ctrl+X` delete-last-message with y/e/n confirmation dialog (for me / for everyone / cancel), `Ctrl+V` verify-contact screen, `?` help overlay toggle
-- [view.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/view.go): `View()` — Lipgloss layouts, color palette, dashboard, profile (with Ed25519 key fingerprint), chat, search, help overlay, verify contact screen (6-digit verification code), verified badge in sidebar, and empty-state renderers
+- [model.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/model.go): `Model` struct, `NewModel()`, `Init()` — state initialization, text inputs, `FocusMode` type, `AppState` constants, `SearchResult` local type, `UnreadCounts` map, `OnlineUsers` presence map, `ConfirmAction`/`ConfirmTarget` for confirmation dialogs, `UserList`/`UserListSelected` for user directory
+- [update.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/update.go): `Update()` — Elm Architecture message loop, keyboard handling, shortcut commands, focus-aware input routing, `RefreshUnreadCounts()`, `sendReadReceipts()`, `PresenceTickMsg` (30s online presence polling), simplified 3-state message status display (`[Queued]`/`[✓]`/`[✓✓]`), 🔒 encryption indicator for E2E encrypted messages (US-3), `Ctrl+D` delete-contact with y/n confirmation dialog, `Ctrl+X` delete-last-message with y/e/n confirmation dialog (for me / for everyone / cancel), `Ctrl+V` verify-contact screen, `Ctrl+L` user directory, `?` help overlay toggle
+- [view.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/view.go): `View()` — Lipgloss layouts, color palette, dashboard, profile (with Ed25519 key fingerprint), chat, search, help overlay, verify contact screen (6-digit verification code), user directory screen (all registered users with online/last-seen), verified badge in sidebar, `formatTimeAgo()` helper, and empty-state renderers
 
 ## Local Contracts
 
@@ -42,6 +42,7 @@ The dashboard uses a `FocusMode` enum (`FocusSidebar` / `FocusChat`) to control 
 | `StateSearch` | Relay user search with results list | Esc → Dashboard |
 | `StateHelp` | Keyboard shortcut reference overlay | Esc or ? → Dashboard |
 | `StateVerify` | Contact verification code display | Esc → Dashboard |
+| `StateUserList` | Full relay user directory with add-contact | Esc → Dashboard |
 
 ## Context-Aware Footer
 

@@ -282,6 +282,27 @@ func (rs *RelayServer) HandleWhoOnline(sender *ClientConn) {
 	}
 }
 
+// HandleListUsers returns all registered users with online/offline status.
+func (rs *RelayServer) HandleListUsers(sender *ClientConn) {
+	var users []protocol.UserInfo
+	rs.registryMu.RLock()
+	for _, user := range rs.userRegistry {
+		rs.clientsMu.RLock()
+		_, isOnline := rs.clients[user.UUID]
+		rs.clientsMu.RUnlock()
+		users = append(users, protocol.UserInfo{
+			UUID:     user.UUID,
+			Username: user.Username,
+			Online:   isOnline,
+			LastSeen: user.LastSeen.Format(time.RFC3339),
+		})
+	}
+	rs.registryMu.RUnlock()
+	if err := sender.Send(protocol.RelayFrame{Type: "user_list", Users: users}); err != nil {
+		log.Printf("relay: failed to send user list to %s: %v", sender.UUID[:8], err)
+	}
+}
+
 // StoredCount returns the number of stored messages for a recipient (used in tests).
 func (rs *RelayServer) StoredCount(recipientUUID string) int {
 	rs.storeMu.RLock()
@@ -381,6 +402,13 @@ func (rs *RelayServer) handleClient(conn net.Conn) {
 				return
 			}
 			rs.HandleWhoOnline(client)
+
+		case "list_users":
+			if client == nil {
+				log.Printf("Unregistered client attempted list_users")
+				return
+			}
+			rs.HandleListUsers(client)
 
 		case "ping":
 			if client != nil {
