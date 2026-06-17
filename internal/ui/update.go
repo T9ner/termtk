@@ -248,7 +248,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.AddContactInput.Focus()
 
 			case tea.KeyCtrlV:
-				if m.SelectedIdx >= 0 && m.SelectedIdx < len(m.Contacts) {
+				if m.Focus == FocusSidebar && m.SelectedIdx >= 0 && m.SelectedIdx < len(m.Contacts) {
 					m.State = StateVerify
 				}
 

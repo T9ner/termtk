@@ -175,9 +175,14 @@ func (rs *RelayServer) HandleRelay(sender *ClientConn, frame protocol.RelayFrame
 
 	if online {
 		err := target.Send(protocol.RelayFrame{
-			Type:    "msg",
-			UUID:    sender.UUID,
-			Message: frame.Message,
+			Type:            "msg",
+			UUID:            sender.UUID,
+			Message:         frame.Message,
+			PublicKey:       frame.PublicKey,
+			Signature:       frame.Signature,
+			Encrypted:       frame.Encrypted,
+			Nonce:           frame.Nonce,
+			X25519PublicKey: frame.X25519PublicKey,
 		})
 		if err != nil {
 			log.Printf("relay: failed to forward message from %s to %s: %v", sender.UUID[:8], recipientUUID[:8], err)
@@ -202,10 +207,15 @@ func (rs *RelayServer) HandleRelay(sender *ClientConn, frame protocol.RelayFrame
 			SenderUUID:     sender.UUID,
 			SenderUsername: sender.Username,
 			Frame: protocol.RelayFrame{
-				Type:      "msg",
-				UUID:      sender.UUID,
-				Message:   frame.Message,
-				MessageID: messageID,
+				Type:            "msg",
+				UUID:            sender.UUID,
+				Message:         frame.Message,
+				MessageID:       messageID,
+				PublicKey:       frame.PublicKey,
+				Signature:       frame.Signature,
+				Encrypted:       frame.Encrypted,
+				Nonce:           frame.Nonce,
+				X25519PublicKey: frame.X25519PublicKey,
 			},
 			StoredAt: time.Now(),
 		}
