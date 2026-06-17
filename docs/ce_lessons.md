@@ -133,3 +133,32 @@ When completing a debugging task or a major architectural optimization:
   * After ANY Fly.io deployment, verify TCP connectivity: `fly ping` or a manual TCP socket test to the app hostname and port.
   * Prefer `fly launch` over `fly apps create` + `fly deploy` for new apps — it handles IP allocation, volume creation, and service configuration automatically.
 
+---
+
+### CE-007: Fly.io Shared IPv4 Cannot Route Raw TCP on Custom Ports
+* **Date:** 2026-06-17
+* **Symptom:** After allocating shared IPv4 and IPv6, TCP connections to `termtalk-relay.fly.dev:55558` appeared to succeed at socket level (SYN/ACK) but the relay application never received any data. Registration always returned empty response. Relay health logs showed `connected=0` despite clients connecting.
+* **Root Cause:** Fly.io shared IPv4 uses Anycast and routes traffic by inspecting SNI (TLS) or Host headers (HTTP). Raw TCP on a non-standard port (55558) has no such headers, so the proxy accepts the TCP handshake but cannot route bytes to the correct app. The health check passed because it runs inside Fly's internal network, not through the public proxy.
+* **Code Change / Fix:**
+  1. Allocated a **dedicated IPv4** (`fly ips allocate-v4`, $2/month) which routes ALL ports directly.
+  2. Released the useless shared IPv4 (`fly ips release <shared-ip>`).
+  3. Added `handlers = []` in `fly.toml` to explicitly request raw TCP passthrough (no TLS termination, no proxy protocol).
+* **Strict Rule to Prevent Regression:**
+  * Raw TCP services on custom ports MUST use dedicated IPv4, not shared.
+  * Always specify `handlers = []` in `[[services.ports]]` for raw TCP to prevent the proxy from interpreting the stream as HTTP.
+  * After ANY IP change, flush local DNS cache (`ipconfig /flushdns`) and verify resolution points to the correct IP.
+
+---
+
+### CE-008: Multiple Fly.io Machines Split In-Memory Relay State
+* **Date:** 2026-06-17
+* **Symptom:** Two clients connected to the relay but could not find or message each other. Search returned no results. The relay health log on each machine showed only 0 or 1 connected client.
+* **Root Cause:** Fly.io auto-created 2 machines for "high availability." Each machine ran an independent relay with its own in-memory `clients`, `userRegistry`, and `messageStore`. Client A landing on machine 1 and client B on machine 2 were completely isolated — different registries, different connection maps, different stored messages.
+* **Code Change / Fix:**
+  1. Scaled to exactly 1 machine: `fly scale count 1 --yes`.
+  2. Added `[deploy] min_machines_running = 1` to `fly.toml` to prevent auto-scaling.
+  3. Documented that multi-machine support requires relay-side persistence (v0.4.0 scope).
+* **Strict Rule to Prevent Regression:**
+  * Do NOT scale the relay beyond 1 machine while state is in-memory.
+  * Before enabling multi-machine, implement shared state (relay SQLite on a Fly volume, or external coordination).
+  * After every `fly deploy`, verify `fly scale show` reports exactly 1 machine.

@@ -1,6 +1,12 @@
 app = 'termtalk-relay'
 primary_region = 'lhr'
 
+# CRITICAL: Keep exactly 1 machine. Relay state is in-memory — multiple
+# machines split the user registry and connections, breaking routing.
+# Remove this constraint after adding relay-side persistence (v0.4.0).
+[deploy]
+  min_machines_running = 1
+
 [build]
   dockerfile = 'Dockerfile'
 
@@ -10,6 +16,7 @@ primary_region = 'lhr'
 
   [[services.ports]]
     port = 55558
+    handlers = []
 
   [services.concurrency]
     type = 'connections'
