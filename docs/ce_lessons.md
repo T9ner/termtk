@@ -173,3 +173,15 @@ When completing a debugging task or a major architectural optimization:
 * **Strict Rule to Prevent Regression:**
   * NEVER use `sql.RawBytes` with `QueryRow().Scan()` — always use `[]byte`.
   * `sql.RawBytes` is only safe inside a `for rows.Next()` loop, and even then `[]byte` is simpler and preferred.
+
+---
+
+### CE-010: Relay Forwarding Drops Fields When Constructing New Frames
+* **Date:** 2026-06-17
+* **Symptom:** E2E encryption was completely non-functional. Encrypted messages arrived as empty/corrupted because the recipient had no `Encrypted`, `Nonce`, or `X25519PublicKey` fields to decrypt with.
+* **Root Cause:** `HandleRelay` in the relay server constructed NEW `RelayFrame` structs for both online forwarding and offline storage, explicitly listing only `Type`, `UUID`, and `Message` fields. All crypto fields (`Encrypted`, `Nonce`, `X25519PublicKey`, `PublicKey`, `Signature`) were silently dropped.
+* **Code Change / Fix:** Added all 5 crypto fields to both the online forwarding frame and the offline storage frame in `HandleRelay`.
+* **Strict Rule to Prevent Regression:**
+  * When forwarding relay frames, ALWAYS pass through ALL fields from the incoming frame that the recipient needs. Do NOT construct minimal new frames — explicitly list every field that should be forwarded.
+  * When adding new fields to `RelayFrame`, audit every place that constructs a `RelayFrame` to determine if the new field should be forwarded.
+  * Also caught: `Ctrl+V` (verify) fired from chat focus, blocking paste. Guard state-transition shortcuts with focus checks when the shortcut conflicts with standard terminal behavior.
