@@ -10,7 +10,7 @@ Package `db` provides SQLite-based persistent storage for the TermTalk client us
 ## Ownership
 
 - [db.go](file:///C:/Users/HP/Desktop/termtk/internal/db/db.go): Connection config, schema migrations, CRUD operations (including `DeleteContact`), `addColumnIfNotExists` helper for backward-compatible ALTER TABLE migrations
-- [models.go](file:///C:/Users/HP/Desktop/termtk/internal/db/models.go): `Profile` (with Ed25519 `PublicKey`/`PrivateKey`, `Fingerprint()`, `Sign()`), `Contact` (with `PublicKey`/`Verified`), `Message` structs, `MessageStatus` constants (`queued`, `stored`, `synced`, `ack`, `read`), standalone `Verify()` function
+- [models.go](file:///C:/Users/HP/Desktop/termtk/internal/db/models.go): `Profile` (with Ed25519 `PublicKey`/`PrivateKey`, `X25519PublicKey`, `Fingerprint()`, `Sign()`), `Contact` (with `PublicKey`/`Verified`/`X25519PublicKey`), `Message` structs (with `Encrypted` flag), `MessageStatus` constants (`queued`, `stored`, `synced`, `ack`, `read`), standalone `Verify()` function, `VerificationCode()` (deterministic 6-digit code from two public keys)
 - [sneakernet.go](file:///C:/Users/HP/Desktop/termtk/internal/db/sneakernet.go): JSON-based sync file export/import for network-free sharing
 
 ## Local Contracts

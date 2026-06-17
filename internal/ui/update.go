@@ -122,6 +122,11 @@ func (m *Model) ReloadMessages() {
 		for _, msg := range history {
 			timestamp := msg.Timestamp.Format("15:04:05")
 			statusStr := ""
+			// Encryption indicator
+			encIcon := ""
+			if msg.Encrypted {
+				encIcon = " 🔒"
+			}
 			var line string
 			if msg.Sender == m.LocalUser.UUID {
 				switch msg.Status {
@@ -132,9 +137,9 @@ func (m *Model) ReloadMessages() {
 				case string(db.StatusAck), string(db.StatusRead):
 					statusStr = " [✓✓]"
 				}
-				line = fmt.Sprintf("[%s] You: %s%s", timestamp, msg.Content, statusStr)
+				line = fmt.Sprintf("[%s] You: %s%s%s", timestamp, msg.Content, statusStr, encIcon)
 			} else {
-				line = fmt.Sprintf("[%s] %s: %s", timestamp, contact.Username, msg.Content)
+				line = fmt.Sprintf("[%s] %s: %s%s", timestamp, contact.Username, msg.Content, encIcon)
 			}
 			builder.WriteString(msgStyle.Render(line) + "\n")
 		}
@@ -242,6 +247,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.AddContactInput.SetValue("")
 				m.AddContactInput.Focus()
 
+			case tea.KeyCtrlV:
+				if m.SelectedIdx >= 0 && m.SelectedIdx < len(m.Contacts) {
+					m.State = StateVerify
+				}
+
 			case tea.KeyCtrlF:
 				m.State = StateSearch
 				m.SearchInput.SetValue("")
@@ -255,6 +265,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.ConfirmAction = "delete_contact"
 					m.ConfirmTarget = contact.UUID
 					m.SetStatus(fmt.Sprintf("Delete @%s? (y/n)", contact.Username), 30*time.Second)
+				}
+
+			case tea.KeyCtrlX:
+				if m.Focus == FocusChat && m.SelectedIdx >= 0 && m.SelectedIdx < len(m.Contacts) && m.LocalUser != nil {
+					// Find the last message sent by the local user
+					var lastSentID string
+					for i := len(m.ChatHistory) - 1; i >= 0; i-- {
+						if m.ChatHistory[i].Sender == m.LocalUser.UUID {
+							lastSentID = m.ChatHistory[i].ID
+							break
+						}
+					}
+					if lastSentID != "" {
+						m.ConfirmAction = "delete_message"
+						m.ConfirmTarget = lastSentID
+						m.SetStatus("Delete last message? (y: for me, e: for everyone, n: cancel)", 30*time.Second)
+					}
 				}
 
 			case tea.KeyUp:
@@ -300,9 +327,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			default:
 				// Handle confirmation dialog responses
 				if m.ConfirmAction != "" {
-					if msg.String() == "y" || msg.String() == "Y" {
-						switch m.ConfirmAction {
-						case "delete_contact":
+					switch m.ConfirmAction {
+					case "delete_contact":
+						if msg.String() == "y" || msg.String() == "Y" {
 							if err := m.Client.DeleteContact(m.ConfirmTarget); err != nil {
 								m.SetStatus(fmt.Sprintf("Failed to delete: %v", err), 3*time.Second)
 							} else {
@@ -318,8 +345,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 									m.Viewport.SetContent("Select a contact to start messaging.")
 								}
 							}
+						} else {
+							m.SetStatus("Cancelled.", 2*time.Second)
 						}
-					} else {
+					case "delete_message":
+						if msg.String() == "y" || msg.String() == "Y" {
+							// Delete for me only
+							if err := m.Client.DeleteMessagesLocal([]string{m.ConfirmTarget}); err != nil {
+								m.SetStatus(fmt.Sprintf("Failed: %v", err), 3*time.Second)
+							} else {
+								m.SetStatus("Message deleted (for you).", 3*time.Second)
+								m.ReloadMessages()
+							}
+						} else if msg.String() == "e" || msg.String() == "E" {
+							// Delete for everyone
+							contact := m.Contacts[m.SelectedIdx]
+							if err := m.Client.DeleteMessagesForEveryone(contact.UUID, []string{m.ConfirmTarget}); err != nil {
+								m.SetStatus(fmt.Sprintf("Failed: %v", err), 3*time.Second)
+							} else {
+								m.SetStatus("Message deleted for everyone.", 3*time.Second)
+								m.ReloadMessages()
+							}
+						} else {
+							m.SetStatus("Cancelled.", 2*time.Second)
+						}
+					default:
 						m.SetStatus("Cancelled.", 2*time.Second)
 					}
 					m.ConfirmAction = ""
@@ -493,6 +543,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.MsgInput.Focus()
 				}
 				return m, nil
+			}
+
+		case StateVerify:
+			switch msg.Type {
+			case tea.KeyEsc:
+				m.State = StateDashboard
+				if m.Focus == FocusChat {
+					m.MsgInput.Focus()
+				}
+				return m, nil
+			default:
+				if msg.String() == "v" || msg.String() == "V" {
+					if m.SelectedIdx >= 0 && m.SelectedIdx < len(m.Contacts) {
+						contact := m.Contacts[m.SelectedIdx]
+						_ = m.Client.SetContactVerified(contact.UUID, true)
+						m.SetStatus("Contact verified ✓", 3*time.Second)
+						m.RefreshContacts()
+					}
+				} else if msg.String() == "u" || msg.String() == "U" {
+					if m.SelectedIdx >= 0 && m.SelectedIdx < len(m.Contacts) {
+						contact := m.Contacts[m.SelectedIdx]
+						_ = m.Client.SetContactVerified(contact.UUID, false)
+						m.SetStatus("Contact marked unverified", 3*time.Second)
+						m.RefreshContacts()
+					}
+				}
 			}
 		}
 

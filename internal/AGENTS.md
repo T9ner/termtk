@@ -37,3 +37,4 @@ go vet ./internal/...
 - [client/AGENTS.md](file:///C:/Users/HP/Desktop/termtk/internal/client/AGENTS.md) — Client Facade coordinating db, network, and events
 - [protocol/AGENTS.md](file:///C:/Users/HP/Desktop/termtk/internal/protocol/AGENTS.md) — Shared wire-format types (RelayFrame)
 - [ui/AGENTS.md](file:///C:/Users/HP/Desktop/termtk/internal/ui/AGENTS.md) — Bubble Tea TUI: model, update, view
+- [crypto/AGENTS.md](file:///C:/Users/HP/Desktop/termtk/internal/crypto/AGENTS.md) — NaCl box E2E encryption, X25519 key derivation

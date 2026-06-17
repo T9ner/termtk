@@ -2,6 +2,7 @@ package network
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"termtalk/internal/crypto"
 	"termtalk/internal/db"
 	"termtalk/internal/protocol"
 )
@@ -57,20 +59,21 @@ func (pc *PeerConnection) Close() error {
 
 // SyncManager manages TCP socket listening, outgoing connections, and message sync.
 type SyncManager struct {
-	localUUID  string
-	username   string
-	publicKey  []byte
-	privateKey []byte
-	db         *db.Database
-	tcpPort    int
-	listener   net.Listener
-	activeConn map[string]*PeerConnection // Keyed by Peer UUID
-	mu         sync.Mutex
-	stopChan   chan struct{}
-	stopOnce   sync.Once
-	wg         sync.WaitGroup
-	OnMsgRecv  func(msg *db.Message)
-	OnPeerSync func(peerUUID string)
+	localUUID       string
+	username        string
+	publicKey       []byte
+	privateKey      []byte
+	x25519PublicKey []byte
+	db              *db.Database
+	tcpPort         int
+	listener        net.Listener
+	activeConn      map[string]*PeerConnection // Keyed by Peer UUID
+	mu              sync.Mutex
+	stopChan        chan struct{}
+	stopOnce        sync.Once
+	wg              sync.WaitGroup
+	OnMsgRecv       func(msg *db.Message)
+	OnPeerSync      func(peerUUID string)
 
 	// Relay connection state
 	relayAddr   string
@@ -110,13 +113,14 @@ func (sm *SyncManager) SetRelayAddr(addr string) {
 }
 
 // UpdateCredentials updates the profile credentials thread-safely after registration.
-func (sm *SyncManager) UpdateCredentials(uuid, username string, publicKey, privateKey []byte) {
+func (sm *SyncManager) UpdateCredentials(uuid, username string, publicKey, privateKey, x25519PublicKey []byte) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.localUUID = uuid
 	sm.username = username
 	sm.publicKey = publicKey
 	sm.privateKey = privateKey
+	sm.x25519PublicKey = x25519PublicKey
 }
 
 // getLocalUUID safely reads localUUID under lock.
@@ -287,6 +291,17 @@ func (sm *SyncManager) SendMessage(peerUUID string, content string) error {
 	} else {
 		// Attempt routing through the relay server
 		go func() {
+			// Check if message will be encrypted (contact has X25519 key)
+			sm.mu.Lock()
+			privKey := sm.privateKey
+			sm.mu.Unlock()
+			if len(privKey) > 0 {
+				recipientContact, cErr := sm.db.GetContact(peerUUID)
+				if cErr == nil && recipientContact != nil && len(recipientContact.X25519PublicKey) == 32 {
+					msg.Encrypted = true
+				}
+			}
+
 			err := sm.sendRelayFrame(peerUUID, Frame{
 				Type:    "msg",
 				Message: msg,
@@ -342,12 +357,46 @@ func (sm *SyncManager) sendRelayFrame(recipientUUID string, f Frame) error {
 
 	// Sign the payload with Ed25519 if keys are available
 	sm.mu.Lock()
-	if len(sm.privateKey) > 0 && len(sm.publicKey) > 0 {
-		p := &db.Profile{PrivateKey: sm.privateKey}
-		relayFrame.Signature = base64.StdEncoding.EncodeToString(p.Sign(payload))
-		relayFrame.PublicKey = base64.StdEncoding.EncodeToString(sm.publicKey)
-	}
+	privKey := sm.privateKey
+	pubKey := sm.publicKey
+	x25519Pub := sm.x25519PublicKey
 	sm.mu.Unlock()
+
+	if len(privKey) > 0 && len(pubKey) > 0 {
+		p := &db.Profile{PrivateKey: privKey}
+		relayFrame.Signature = base64.StdEncoding.EncodeToString(p.Sign(payload))
+		relayFrame.PublicKey = base64.StdEncoding.EncodeToString(pubKey)
+	}
+
+	// Include sender's X25519 public key so the recipient can decrypt
+	if len(x25519Pub) > 0 {
+		relayFrame.X25519PublicKey = base64.StdEncoding.EncodeToString(x25519Pub)
+	}
+
+	// Encrypt the payload with NaCl box if we have both our private key
+	// and the recipient's X25519 public key
+	if len(privKey) > 0 {
+		recipientContact, err := sm.db.GetContact(recipientUUID)
+		if err == nil && recipientContact != nil && len(recipientContact.X25519PublicKey) == 32 {
+			var recipientX25519Pub [32]byte
+			copy(recipientX25519Pub[:], recipientContact.X25519PublicKey)
+
+			ciphertext, nonce, encErr := crypto.Encrypt(payload, ed25519.PrivateKey(privKey), recipientX25519Pub)
+			if encErr == nil {
+				// Replace plaintext payload with encrypted payload
+				relayFrame.Message = json.RawMessage(`"` + ciphertext + `"`)
+				relayFrame.Nonce = nonce
+				relayFrame.Encrypted = true
+				// Re-sign the encrypted payload
+				if len(pubKey) > 0 {
+					p := &db.Profile{PrivateKey: privKey}
+					relayFrame.Signature = base64.StdEncoding.EncodeToString(p.Sign(relayFrame.Message))
+				}
+			} else {
+				log.Printf("sync: encryption failed for %s, sending plaintext: %v", recipientUUID, encErr)
+			}
+		}
+	}
 
 	sm.relayMu.Lock()
 	defer sm.relayMu.Unlock()
@@ -634,6 +683,9 @@ func (sm *SyncManager) relayLoop(ctx context.Context) {
 			if len(sm.publicKey) > 0 {
 				reg.PublicKey = base64.StdEncoding.EncodeToString(sm.publicKey)
 			}
+			if len(sm.x25519PublicKey) > 0 {
+				reg.X25519PublicKey = base64.StdEncoding.EncodeToString(sm.x25519PublicKey)
+			}
 			sm.mu.Unlock()
 			if err := enc.Encode(reg); err != nil {
 				conn.Close()
@@ -700,10 +752,40 @@ func (sm *SyncManager) relayLoop(ctx context.Context) {
 
 					switch frame.Type {
 					case "msg":
+						msgPayload := frame.Message
+						wasEncrypted := false
+
+						// Decrypt NaCl box if encrypted
+						if frame.Encrypted && frame.Nonce != "" && frame.X25519PublicKey != "" {
+							sm.mu.Lock()
+							privKey := sm.privateKey
+							sm.mu.Unlock()
+
+							if len(privKey) > 0 {
+								senderX25519Bytes, x25519Err := base64.StdEncoding.DecodeString(frame.X25519PublicKey)
+								if x25519Err == nil && len(senderX25519Bytes) == 32 {
+									var senderX25519Pub [32]byte
+									copy(senderX25519Pub[:], senderX25519Bytes)
+
+									// The encrypted payload is a JSON string (base64 ciphertext)
+									var ciphertextB64 string
+									if err := json.Unmarshal(msgPayload, &ciphertextB64); err == nil {
+										plaintext, decErr := crypto.Decrypt(ciphertextB64, frame.Nonce, ed25519.PrivateKey(privKey), senderX25519Pub)
+										if decErr == nil {
+											msgPayload = plaintext
+											wasEncrypted = true
+										} else {
+											log.Printf("sync: decryption failed from %s: %v", frame.UUID, decErr)
+										}
+									}
+								}
+							}
+						}
+
 						var inner Frame
-						if err := json.Unmarshal(frame.Message, &inner); err == nil {
+						if err := json.Unmarshal(msgPayload, &inner); err == nil {
 							// Verify Ed25519 signature if present (warn-only in v0.4.0)
-							if frame.Signature != "" && frame.PublicKey != "" {
+							if !frame.Encrypted && frame.Signature != "" && frame.PublicKey != "" {
 								pubKeyBytes, pkErr := base64.StdEncoding.DecodeString(frame.PublicKey)
 								sigBytes, sigErr := base64.StdEncoding.DecodeString(frame.Signature)
 								if pkErr != nil || sigErr != nil {
@@ -712,6 +794,24 @@ func (sm *SyncManager) relayLoop(ctx context.Context) {
 									log.Printf("sync: WARNING: invalid Ed25519 signature from %s", frame.UUID)
 								}
 							}
+
+							// Store sender's X25519 public key for future encryption
+							if frame.X25519PublicKey != "" {
+								x25519Bytes, x25519Err := base64.StdEncoding.DecodeString(frame.X25519PublicKey)
+								if x25519Err == nil && len(x25519Bytes) == 32 {
+									contact, cErr := sm.db.GetContact(frame.UUID)
+									if cErr == nil && contact != nil && len(contact.X25519PublicKey) == 0 {
+										contact.X25519PublicKey = x25519Bytes
+										_ = sm.db.UpsertContact(contact)
+									}
+								}
+							}
+
+							// Mark inner message as encrypted if decryption succeeded
+							if wasEncrypted && inner.Message != nil {
+								inner.Message.Encrypted = true
+							}
+
 							sm.handleRelayFrame(frame.UUID, inner)
 						}
 					case "stored":
@@ -737,6 +837,16 @@ func (sm *SyncManager) relayLoop(ctx context.Context) {
 					case "read_ack":
 						if sm.OnReadAck != nil {
 							sm.OnReadAck(frame.UUID, frame.MessageIDs)
+						}
+					case "delete":
+						if frame.MessageIDs != nil {
+							if err := sm.db.DeleteMessages(frame.MessageIDs); err != nil {
+								log.Printf("sync: failed to delete messages: %v", err)
+							}
+							if sm.OnMsgRecv != nil {
+								// Trigger UI refresh by sending a nil message event
+								sm.OnMsgRecv(nil)
+							}
 						}
 					}
 				}
@@ -873,6 +983,21 @@ func (sm *SyncManager) SendReadAck(recipientUUID string, messageIDs []string) er
 	}
 	return sm.relayEnc.Encode(protocol.RelayFrame{
 		Type:       "read_ack",
+		Recipient:  recipientUUID,
+		MessageIDs: messageIDs,
+	})
+}
+
+// SendDeleteRequest sends a delete frame to the recipient via relay.
+// CE-005: relayMu is held for the entire Encode() call.
+func (sm *SyncManager) SendDeleteRequest(recipientUUID string, messageIDs []string) error {
+	sm.relayMu.Lock()
+	defer sm.relayMu.Unlock()
+	if !sm.relayOnline || sm.relayEnc == nil {
+		return fmt.Errorf("relay offline")
+	}
+	return sm.relayEnc.Encode(protocol.RelayFrame{
+		Type:       "delete",
 		Recipient:  recipientUUID,
 		MessageIDs: messageIDs,
 	})

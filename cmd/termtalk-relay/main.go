@@ -400,6 +400,23 @@ func (rs *RelayServer) handleClient(conn net.Conn) {
 				})
 			}
 			// Don't store read_acks — they're ephemeral
+
+		case "delete":
+			if client == nil {
+				log.Printf("Unregistered client attempted delete")
+				return
+			}
+			// Forward delete to recipient
+			rs.clientsMu.RLock()
+			target, online := rs.clients[frame.Recipient]
+			rs.clientsMu.RUnlock()
+			if online {
+				_ = target.Send(protocol.RelayFrame{
+					Type:       "delete",
+					UUID:       client.UUID,
+					MessageIDs: frame.MessageIDs,
+				})
+			}
 		}
 	}
 }
