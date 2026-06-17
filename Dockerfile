@@ -9,5 +9,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o termtalk-relay ./cmd/termtalk-relay
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /app/termtalk-relay /usr/local/bin/termtalk-relay
+RUN mkdir -p /data
+VOLUME /data
 EXPOSE 55558
 CMD ["termtalk-relay", "--port", "55558"]

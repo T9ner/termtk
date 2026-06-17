@@ -11,7 +11,7 @@ Package `ui` implements the terminal user interface using [Bubble Tea](https://g
 
 - [model.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/model.go): `Model` struct, `NewModel()`, `Init()` — state initialization, text inputs, `FocusMode` type, `AppState` constants, `SearchResult` local type, `UnreadCounts` map, `OnlineUsers` presence map, `ConfirmAction`/`ConfirmTarget` for confirmation dialogs
 - [update.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/update.go): `Update()` — Elm Architecture message loop, keyboard handling, shortcut commands, focus-aware input routing, `RefreshUnreadCounts()`, `sendReadReceipts()`, `PresenceTickMsg` (30s online presence polling), simplified 3-state message status display (`[Queued]`/`[✓]`/`[✓✓]`), `Ctrl+D` delete-contact with y/n confirmation dialog, `?` help overlay toggle
-- [view.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/view.go): `View()` — Lipgloss layouts, color palette, dashboard, profile, chat, search, help overlay, and empty-state renderers
+- [view.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/view.go): `View()` — Lipgloss layouts, color palette, dashboard, profile (with Ed25519 key fingerprint), chat, search, help overlay, and empty-state renderers
 
 ## Local Contracts
 

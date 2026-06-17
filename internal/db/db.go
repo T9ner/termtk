@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "github.com/ncruces/go-sqlite3/driver"
@@ -92,42 +93,77 @@ func (d *Database) migrate() error {
 			return err
 		}
 	}
+
+	// Add Ed25519 identity columns (v0.4.0) — backward compatible with existing DBs.
+	if err := d.addColumnIfNotExists("profile", "public_key", "BLOB"); err != nil {
+		return err
+	}
+	if err := d.addColumnIfNotExists("profile", "private_key", "BLOB"); err != nil {
+		return err
+	}
+	if err := d.addColumnIfNotExists("contacts", "public_key", "BLOB"); err != nil {
+		return err
+	}
+	if err := d.addColumnIfNotExists("contacts", "verified", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// addColumnIfNotExists adds a column to a table, ignoring errors if the column already exists.
+func (d *Database) addColumnIfNotExists(table, column, colType string) error {
+	_, err := d.conn.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, colType))
+	if err != nil && strings.Contains(err.Error(), "duplicate column") {
+		return nil // Column already exists, safe to ignore
+	}
+	return err
 }
 
 // GetProfile retrieves the local user's profile if it exists.
 func (d *Database) GetProfile() (*Profile, error) {
 	var p Profile
-	err := d.conn.QueryRow("SELECT uuid, username FROM profile LIMIT 1").Scan(&p.UUID, &p.Username)
+	var pubKey, privKey []byte
+	err := d.conn.QueryRow("SELECT uuid, username, public_key, private_key FROM profile LIMIT 1").
+		Scan(&p.UUID, &p.Username, &pubKey, &privKey)
 	if err == sql.ErrNoRows {
 		return nil, nil // No profile registered yet
 	}
 	if err != nil {
 		return nil, err
 	}
+	p.PublicKey = []byte(pubKey)
+	p.PrivateKey = []byte(privKey)
 	return &p, nil
 }
 
 // SaveProfile creates or updates the local user's profile.
 func (d *Database) SaveProfile(p *Profile) error {
 	_, err := d.conn.Exec(
-		"INSERT INTO profile (uuid, username) VALUES (?, ?) ON CONFLICT(uuid) DO UPDATE SET username = excluded.username",
-		p.UUID, p.Username,
+		`INSERT INTO profile (uuid, username, public_key, private_key) VALUES (?, ?, ?, ?)
+		 ON CONFLICT(uuid) DO UPDATE SET username = excluded.username, public_key = excluded.public_key, private_key = excluded.private_key`,
+		p.UUID, p.Username, p.PublicKey, p.PrivateKey,
 	)
 	return err
 }
 
 // upsertContactTx inserts or updates a peer's details in the contacts table inside a transaction.
 func (d *Database) upsertContactTx(tx *sql.Tx, c *Contact) error {
+	var verified int
+	if c.Verified {
+		verified = 1
+	}
 	_, err := tx.Exec(
-		`INSERT INTO contacts (uuid, username, ip, port, last_seen) 
-		 VALUES (?, ?, ?, ?, ?) 
+		`INSERT INTO contacts (uuid, username, ip, port, last_seen, public_key, verified) 
+		 VALUES (?, ?, ?, ?, ?, ?, ?) 
 		 ON CONFLICT(uuid) DO UPDATE SET 
 			username = excluded.username, 
 			ip = excluded.ip, 
 			port = excluded.port, 
-			last_seen = excluded.last_seen`,
-		c.UUID, c.Username, c.IP, c.Port, c.LastSeen,
+			last_seen = excluded.last_seen,
+			public_key = COALESCE(excluded.public_key, contacts.public_key),
+			verified = excluded.verified`,
+		c.UUID, c.Username, c.IP, c.Port, c.LastSeen, c.PublicKey, verified,
 	)
 	return err
 }
@@ -148,20 +184,24 @@ func (d *Database) UpsertContact(c *Contact) error {
 // GetContact retrieves a single contact by their UUID.
 func (d *Database) GetContact(uuid string) (*Contact, error) {
 	var c Contact
-	err := d.conn.QueryRow("SELECT uuid, username, ip, port, last_seen FROM contacts WHERE uuid = ?", uuid).
-		Scan(&c.UUID, &c.Username, &c.IP, &c.Port, &c.LastSeen)
+	var pubKey []byte
+	var verified int
+	err := d.conn.QueryRow("SELECT uuid, username, ip, port, last_seen, public_key, verified FROM contacts WHERE uuid = ?", uuid).
+		Scan(&c.UUID, &c.Username, &c.IP, &c.Port, &c.LastSeen, &pubKey, &verified)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	c.PublicKey = []byte(pubKey)
+	c.Verified = verified != 0
 	return &c, nil
 }
 
 // ListContacts retrieves all stored contacts.
 func (d *Database) ListContacts() ([]Contact, error) {
-	rows, err := d.conn.Query("SELECT uuid, username, ip, port, last_seen FROM contacts ORDER BY username ASC")
+	rows, err := d.conn.Query("SELECT uuid, username, ip, port, last_seen, public_key, verified FROM contacts ORDER BY username ASC")
 	if err != nil {
 		return nil, err
 	}
@@ -170,9 +210,13 @@ func (d *Database) ListContacts() ([]Contact, error) {
 	var contacts []Contact
 	for rows.Next() {
 		var c Contact
-		if err := rows.Scan(&c.UUID, &c.Username, &c.IP, &c.Port, &c.LastSeen); err != nil {
+		var pubKey []byte
+		var verified int
+		if err := rows.Scan(&c.UUID, &c.Username, &c.IP, &c.Port, &c.LastSeen, &pubKey, &verified); err != nil {
 			return nil, err
 		}
+		c.PublicKey = []byte(pubKey)
+		c.Verified = verified != 0
 		contacts = append(contacts, c)
 	}
 	return contacts, nil

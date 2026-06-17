@@ -1,11 +1,15 @@
 app = 'termtalk-relay'
 primary_region = 'lhr'
 
-# CRITICAL: Keep exactly 1 machine. Relay state is in-memory — multiple
-# machines split the user registry and connections, breaking routing.
-# Remove this constraint after adding relay-side persistence (v0.4.0).
+# Keep exactly 1 machine. Multi-machine requires shared external state
+# beyond the per-machine SQLite volume.
 [deploy]
   min_machines_running = 1
+
+[mounts]
+  source = "termtalk_data"
+  destination = "/data"
+
 
 [build]
   dockerfile = 'Dockerfile'
