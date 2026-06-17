@@ -502,7 +502,7 @@ func (m Model) viewHelp() string {
 	writeSection("Actions")
 	writeKey("Ctrl+F", "Find users on relay")
 	writeKey("Ctrl+N", "Add contact manually")
-	writeKey("Ctrl+D", "Delete selected contact")
+	writeKey("Del/Ctrl+D", "Delete selected contact")
 	writeKey("Ctrl+P", "View your profile")
 	sb.WriteString("\n")
 

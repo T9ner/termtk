@@ -249,7 +249,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.SearchResults = nil
 				m.SearchSelectedIdx = 0
 
-			case tea.KeyCtrlD:
+			case tea.KeyCtrlD, tea.KeyDelete:
 				if m.Focus == FocusSidebar && m.SelectedIdx >= 0 && m.SelectedIdx < len(m.Contacts) {
 					contact := m.Contacts[m.SelectedIdx]
 					m.ConfirmAction = "delete_contact"
