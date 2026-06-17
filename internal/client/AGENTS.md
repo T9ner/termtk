@@ -9,7 +9,7 @@ Package `client` provides the `Client` struct — the central Facade/Mediator th
 
 ## Ownership
 
-- [client.go](file:///C:/Users/HP/Desktop/termtk/internal/client/client.go): `Client` struct, `Event` interface, `PeerDiscoveredEvent`, `MessageReceivedEvent`, `SearchResultEvent`, `OnlineListEvent`, `ReadAckEvent`, and all public methods including `SearchUsers(query)`, `GetOnlineUsers()`, `SendReadAck()`, `GetUnreadCount()`, `MarkMessagesRead()`
+- [client.go](file:///C:/Users/HP/Desktop/termtk/internal/client/client.go): `Client` struct, `Event` interface, `PeerDiscoveredEvent`, `MessageReceivedEvent`, `SearchResultEvent`, `OnlineListEvent`, `ReadAckEvent`, and all public methods including `SearchUsers(query)`, `GetOnlineUsers()`, `SendReadAck()`, `GetUnreadCount()`, `MarkMessagesRead()`, `DeleteContact(uuid)`
 
 ## Local Contracts
 

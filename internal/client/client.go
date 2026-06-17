@@ -214,6 +214,15 @@ func (c *Client) AddContact(username, uuid string) error {
 	})
 }
 
+// DeleteContact removes a contact from the local database.
+// Message history is preserved for archival purposes.
+func (c *Client) DeleteContact(uuid string) error {
+	if uuid == "" {
+		return fmt.Errorf("client: uuid must not be empty")
+	}
+	return c.db.DeleteContact(uuid)
+}
+
 // SendMessage sends a Message to peerUUID. The message is saved locally with
 // status "queued"; if the Peer is online it is delivered over TCP immediately.
 func (c *Client) SendMessage(peerUUID, content string) error {

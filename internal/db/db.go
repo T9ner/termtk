@@ -178,6 +178,12 @@ func (d *Database) ListContacts() ([]Contact, error) {
 	return contacts, nil
 }
 
+// DeleteContact removes a contact by UUID. Message history is preserved.
+func (d *Database) DeleteContact(uuid string) error {
+	_, err := d.conn.Exec("DELETE FROM contacts WHERE uuid = ?", uuid)
+	return err
+}
+
 // saveMessageTx stores a message in the database inside a transaction.
 func (d *Database) saveMessageTx(tx *sql.Tx, m *Message) error {
 	if m.ID == "" {

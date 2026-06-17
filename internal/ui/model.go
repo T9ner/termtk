@@ -18,6 +18,7 @@ const (
 	StateAddContact
 	StateProfile
 	StateSearch
+	StateHelp
 )
 
 // FocusMode indicates which pane has keyboard focus on the dashboard.
@@ -60,6 +61,10 @@ type Model struct {
 	TerminalHeight int
 	StatusMessage  string
 	StatusExpiry   int64 // Unix time for when status should clear
+
+	// Confirmation dialog state
+	ConfirmAction string
+	ConfirmTarget string
 
 	// Search state
 	SearchResults     []SearchResult
