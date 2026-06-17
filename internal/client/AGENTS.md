@@ -9,7 +9,7 @@ Package `client` provides the `Client` struct — the central Facade/Mediator th
 
 ## Ownership
 
-- [client.go](file:///C:/Users/HP/Desktop/termtk/internal/client/client.go): `Client` struct, `Event` interface, `PeerDiscoveredEvent`, `MessageReceivedEvent`, `SearchResultEvent`, `OnlineListEvent`, `ReadAckEvent`, and all public methods including `SearchUsers(query)`, `GetOnlineUsers()`, `SendReadAck()`, `GetUnreadCount()`, `MarkMessagesRead()`, `DeleteContact(uuid)`, `DeleteMessagesLocal()`, `DeleteMessagesForEveryone()`, `GetPublicKeyBase64()` (Ed25519 v0.4.0), `SetContactVerified(uuid, verified)` (US-4)
+- [client.go](file:///C:/Users/HP/Desktop/termtk/internal/client/client.go): `Client` struct, `Event` interface, `PeerDiscoveredEvent`, `MessageReceivedEvent`, `SearchResultEvent`, `OnlineListEvent`, `ReadAckEvent`, and all public methods including `SearchUsers(query)`, `GetOnlineUsers()`, `SendReadAck()`, `GetUnreadCount()`, `MarkMessagesRead()`, `DeleteContact(uuid)`, `DeleteMessagesLocal()`, `DeleteMessagesForEveryone()`, `GetPublicKeyBase64()` (Ed25519 v0.4.0), `SetContactVerified(uuid, verified)` (US-4), `AttemptICEConnection(peerUUID)` (ICE NAT hole punching)
 
 ## Local Contracts
 
