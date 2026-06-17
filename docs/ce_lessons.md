@@ -162,3 +162,14 @@ When completing a debugging task or a major architectural optimization:
   * Do NOT scale the relay beyond 1 machine while state is in-memory.
   * Before enabling multi-machine, implement shared state (relay SQLite on a Fly volume, or external coordination).
   * After every `fly deploy`, verify `fly scale show` reports exactly 1 machine.
+
+---
+
+### CE-009: sql.RawBytes Panics with QueryRow().Scan()
+* **Date:** 2026-06-17
+* **Symptom:** `TestProfile` panicked with `sql: RawBytes isn't allowed on Row.Scan`. Nil pointer dereference followed because profile was never returned.
+* **Root Cause:** `sql.RawBytes` is only valid with `Rows.Scan()` (multiple-row iteration). When used with `QueryRow().Scan()` (single-row), the database/sql driver rejects it because RawBytes references internal driver memory that is only stable during Rows iteration.
+* **Code Change / Fix:** Replaced `sql.RawBytes` with `[]byte` in `GetProfile()` and `GetContact()` (both use `QueryRow`). Left `[]byte` in `ListContacts()` too for consistency.
+* **Strict Rule to Prevent Regression:**
+  * NEVER use `sql.RawBytes` with `QueryRow().Scan()` — always use `[]byte`.
+  * `sql.RawBytes` is only safe inside a `for rows.Next()` loop, and even then `[]byte` is simpler and preferred.
