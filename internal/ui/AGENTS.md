@@ -9,9 +9,9 @@ Package `ui` implements the terminal user interface using [Bubble Tea](https://g
 
 ## Ownership
 
-- [model.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/model.go): `Model` struct, `NewModel()`, `Init()` — state initialization, text inputs, `FocusMode` type, `AppState` constants, `SearchResult` local type, `UnreadCounts` map, `OnlineUsers` presence map
-- [update.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/update.go): `Update()` — Elm Architecture message loop, keyboard handling, shortcut commands, focus-aware input routing, `RefreshUnreadCounts()`, `sendReadReceipts()`, `PresenceTickMsg` (30s online presence polling), simplified 3-state message status display (`[Queued]`/`[✓]`/`[✓✓]`)
-- [view.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/view.go): `View()` — Lipgloss layouts, color palette, dashboard, profile, chat, search, and empty-state renderers
+- [model.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/model.go): `Model` struct, `NewModel()`, `Init()` — state initialization, text inputs, `FocusMode` type, `AppState` constants, `SearchResult` local type, `UnreadCounts` map, `OnlineUsers` presence map, `ConfirmAction`/`ConfirmTarget` for confirmation dialogs
+- [update.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/update.go): `Update()` — Elm Architecture message loop, keyboard handling, shortcut commands, focus-aware input routing, `RefreshUnreadCounts()`, `sendReadReceipts()`, `PresenceTickMsg` (30s online presence polling), simplified 3-state message status display (`[Queued]`/`[✓]`/`[✓✓]`), `Ctrl+D` delete-contact with y/n confirmation dialog, `?` help overlay toggle
+- [view.go](file:///C:/Users/HP/Desktop/termtk/internal/ui/view.go): `View()` — Lipgloss layouts, color palette, dashboard, profile, chat, search, help overlay, and empty-state renderers
 
 ## Local Contracts
 
@@ -40,13 +40,16 @@ The dashboard uses a `FocusMode` enum (`FocusSidebar` / `FocusChat`) to control 
 | `StateImport` | Import sync file path prompt | Esc → Dashboard |
 | `StateAddContact` | Manual contact entry | Esc → Dashboard |
 | `StateSearch` | Relay user search with results list | Esc → Dashboard |
+| `StateHelp` | Keyboard shortcut reference overlay | Esc or ? → Dashboard |
 
 ## Context-Aware Footer
 
-The footer changes shortcut hints based on the current state and focus:
+The footer shows 3 concise contextual hints based on state and focus, plus a `?: Help` hint:
 
-- **FocusSidebar**: `↑↓: Navigate | Enter: Open Chat | Tab: Switch to Chat | Ctrl+N: Add Peer | Ctrl+F: Find Users | Ctrl+P: Profile | Ctrl+Q: Quit`
-- **FocusChat**: `↑↓: Scroll | Enter: Send | Tab: Switch to Contacts | Ctrl+E: Export | Ctrl+O: Import | Ctrl+F: Find Users | Ctrl+Q: Quit`
+- **FocusSidebar (no contacts)**: `Ctrl+F: Find  ·  Ctrl+N: Add  ·  ?: Help`
+- **FocusSidebar (with contacts)**: `↑↓: Navigate  ·  Enter: Chat  ·  ?: Help`
+- **FocusChat**: `Enter: Send  ·  Tab: Contacts  ·  ?: Help`
+- **ConfirmAction active**: footer is suppressed (status bar shows the y/n prompt)
 - **Other states**: `Enter: Confirm | Esc: Cancel` (or state-specific hints)
 
 ## Work Guidance

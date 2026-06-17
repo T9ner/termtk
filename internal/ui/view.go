@@ -102,6 +102,8 @@ func (m Model) View() string {
 		return m.viewAddContact()
 	case StateSearch:
 		return m.viewSearch()
+	case StateHelp:
+		return m.viewHelp()
 	default:
 		return "Unknown app state."
 	}
@@ -350,10 +352,16 @@ func (m Model) viewDashboard() string {
 
 // dashboardFooter returns context-aware shortcut hints based on focus mode.
 func (m Model) dashboardFooter() string {
-	if m.Focus == FocusSidebar {
-		return "↑↓: Navigate | Enter: Open Chat | Tab: Switch to Chat | Ctrl+N: Add Peer | Ctrl+F: Find Users | Ctrl+P: Profile | Ctrl+Q: Quit"
+	if m.ConfirmAction != "" {
+		return ""
 	}
-	return "↑↓: Scroll | Enter: Send | Tab: Switch to Contacts | Ctrl+E: Export | Ctrl+O: Import | Ctrl+F: Find Users | Ctrl+Q: Quit"
+	if m.Focus == FocusSidebar {
+		if len(m.Contacts) == 0 {
+			return "Ctrl+F: Find  ·  Ctrl+N: Add  ·  ?: Help"
+		}
+		return "↑↓: Navigate  ·  Enter: Chat  ·  ?: Help"
+	}
+	return "Enter: Send  ·  Tab: Contacts  ·  ?: Help"
 }
 
 func (m Model) viewExport() string {
@@ -461,5 +469,48 @@ func (m Model) viewSearch() string {
 
 	sb.WriteString("\n")
 	sb.WriteString(footerStyle.Render("↑↓: Navigate | Enter: Add Contact | Esc: Cancel"))
+	return sb.String()
+}
+
+func (m Model) viewHelp() string {
+	var sb strings.Builder
+	sb.WriteString("\n")
+	sb.WriteString(titleStyle.Render(" TermTalk Help "))
+	sb.WriteString("\n\n")
+
+	sectionStyle := lipgloss.NewStyle().Foreground(accentColor).Bold(true)
+	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFF")).Bold(true).Width(14)
+	descStyle := lipgloss.NewStyle().Foreground(grayColor)
+	divStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#3A3A3A"))
+
+	writeSection := func(title string) {
+		sb.WriteString(sectionStyle.Render("  "+title) + "\n")
+		sb.WriteString(divStyle.Render("  "+strings.Repeat("─", 38)) + "\n")
+	}
+
+	writeKey := func(key, desc string) {
+		sb.WriteString("  " + keyStyle.Render(key) + descStyle.Render(desc) + "\n")
+	}
+
+	writeSection("Navigation")
+	writeKey("Tab", "Switch sidebar ↔ chat")
+	writeKey("↑ ↓", "Navigate contacts / scroll")
+	writeKey("Enter", "Open chat / send message")
+	writeKey("Esc", "Quit TermTalk")
+	sb.WriteString("\n")
+
+	writeSection("Actions")
+	writeKey("Ctrl+F", "Find users on relay")
+	writeKey("Ctrl+N", "Add contact manually")
+	writeKey("Ctrl+D", "Delete selected contact")
+	writeKey("Ctrl+P", "View your profile")
+	sb.WriteString("\n")
+
+	writeSection("Sync")
+	writeKey("Ctrl+E", "Export sync file")
+	writeKey("Ctrl+O", "Import sync file")
+	sb.WriteString("\n")
+
+	sb.WriteString(footerStyle.Render("  Press Esc or ? to close"))
 	return sb.String()
 }
