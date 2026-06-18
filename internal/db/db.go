@@ -88,6 +88,10 @@ func (d *Database) migrate() error {
 		`CREATE INDEX IF NOT EXISTS idx_messages_recipient_sender ON messages(recipient_uuid, sender_uuid, timestamp);`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_unsynced_sender ON messages(sender_uuid) WHERE status != 'synced';`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_unsynced_recipient ON messages(recipient_uuid) WHERE status != 'synced';`,
+		`CREATE TABLE IF NOT EXISTS settings (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL
+		);`,
 	}
 
 	for _, q := range queries {
@@ -440,5 +444,25 @@ func (d *Database) DeleteMessages(messageIDs []string) error {
 	}
 	query := fmt.Sprintf("DELETE FROM messages WHERE id IN (%s)", strings.Join(placeholders, ","))
 	_, err := d.conn.Exec(query, args...)
+	return err
+}
+
+// GetSetting retrieves a setting value by key. Returns empty string if not found.
+func (d *Database) GetSetting(key string) (string, error) {
+	var value string
+	err := d.conn.QueryRow("SELECT value FROM settings WHERE key = ?", key).Scan(&value)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return value, err
+}
+
+// SetSetting upserts a setting key-value pair.
+func (d *Database) SetSetting(key, value string) error {
+	_, err := d.conn.Exec(
+		`INSERT INTO settings (key, value) VALUES (?, ?)
+		 ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+		key, value,
+	)
 	return err
 }

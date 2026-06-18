@@ -221,7 +221,7 @@ func (m Model) viewDashboard() string {
 	}
 
 	if len(m.Contacts) == 0 {
-		sidebarBuilder.WriteString(lipgloss.NewStyle().Foreground(grayColor).Render("No contacts yet.\nUse Ctrl+N to add."))
+		sidebarBuilder.WriteString(lipgloss.NewStyle().Foreground(grayColor).Render("No contacts yet.\nUse Ctrl+A to add."))
 	} else {
 		maxVisible := m.Viewport.Height + 2
 		if maxVisible < 1 {
@@ -338,7 +338,7 @@ func (m Model) viewDashboard() string {
 		chatBuilder.WriteString(welcomeStyle.Render("  │   ") + accentText.Render("👋 Welcome to TermTalk!") + welcomeStyle.Render("      │") + "\n")
 		chatBuilder.WriteString(welcomeStyle.Render("  │                                 │") + "\n")
 		chatBuilder.WriteString(welcomeStyle.Render("  │   Get started:                  │") + "\n")
-		chatBuilder.WriteString(welcomeStyle.Render("  │   ") + grayText.Render("• Ctrl+N to add a peer") + welcomeStyle.Render("    │") + "\n")
+		chatBuilder.WriteString(welcomeStyle.Render("  │   ") + grayText.Render("• Ctrl+A to add a peer") + welcomeStyle.Render("    │") + "\n")
 		chatBuilder.WriteString(welcomeStyle.Render("  │   ") + grayText.Render("• Ctrl+I to import sync") + welcomeStyle.Render("   │") + "\n")
 		chatBuilder.WriteString(welcomeStyle.Render("  │   ") + grayText.Render("• Ctrl+P to view profile") + welcomeStyle.Render("  │") + "\n")
 		chatBuilder.WriteString(welcomeStyle.Render("  │                                 │") + "\n")
@@ -372,7 +372,7 @@ func (m Model) dashboardFooter() string {
 	}
 	if m.Focus == FocusSidebar {
 		if len(m.Contacts) == 0 {
-			return "Ctrl+F: Find  ·  Ctrl+N: Add  ·  ?: Help"
+			return "Ctrl+F: Find  ·  Ctrl+A: Add  ·  Ctrl+N: Notif  ·  ?: Help"
 		}
 		return "↑↓: Navigate  ·  Enter: Chat  ·  ?: Help"
 	}
@@ -516,7 +516,8 @@ func (m Model) viewHelp() string {
 
 	writeSection("Actions")
 	writeKey("Ctrl+F", "Find users on relay")
-	writeKey("Ctrl+N", "Add contact manually")
+	writeKey("Ctrl+A", "Add contact manually")
+	writeKey("Ctrl+N", "Toggle notifications")
 	writeKey("Del/Ctrl+D", "Delete selected contact")
 	writeKey("Ctrl+V", "Verify contact")
 	writeKey("Ctrl+P", "View your profile")

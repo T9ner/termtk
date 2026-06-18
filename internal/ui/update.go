@@ -13,6 +13,8 @@ import (
 	"termtalk/internal/client"
 	"termtalk/internal/db"
 	"termtalk/internal/protocol"
+
+	"github.com/gen2brain/beeep"
 )
 
 // Init triggers the initial listening command for background events.
@@ -243,6 +245,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.PathInput.Focus()
 
 			case tea.KeyCtrlN:
+				enabled := m.Client.GetNotificationsEnabled()
+				_ = m.Client.SetNotificationsEnabled(!enabled)
+				if !enabled {
+					m.SetStatus("Notifications: ON", 3*time.Second)
+				} else {
+					m.SetStatus("Notifications: OFF", 3*time.Second)
+				}
+
+			case tea.KeyCtrlA:
 				m.State = StateAddContact
 				m.AddContactInput.SetValue("")
 				m.AddContactInput.Focus()
@@ -630,9 +641,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case client.MessageReceivedEvent:
 		m.ReloadMessages()
 		// If the message is in the currently open chat, send read receipt
+		viewingThisChat := false
 		if m.State == StateDashboard && m.SelectedIdx >= 0 && m.SelectedIdx < len(m.Contacts) {
 			if msg.Message != nil && msg.Message.Sender == m.Contacts[m.SelectedIdx].UUID {
+				viewingThisChat = true
 				m.sendReadReceipts()
+			}
+		}
+		// Desktop notification for messages not in the current view
+		if msg.Message != nil && m.LocalUser != nil && msg.Message.Sender != m.LocalUser.UUID && !viewingThisChat {
+			if m.Client.GetNotificationsEnabled() {
+				senderName := msg.Message.Sender
+				for _, c := range m.Contacts {
+					if c.UUID == msg.Message.Sender {
+						senderName = c.Username
+						break
+					}
+				}
+				title := fmt.Sprintf("TermTalk \u2014 @%s", senderName)
+				body := msg.Message.Content
+				if len(body) > 50 {
+					body = body[:50]
+				}
+				_ = beeep.Notify(title, body, "")
 			}
 		}
 		m.RefreshUnreadCounts()

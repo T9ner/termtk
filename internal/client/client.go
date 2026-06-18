@@ -357,3 +357,22 @@ func (c *Client) DeleteMessagesForEveryone(contactUUID string, messageIDs []stri
 	}
 	return c.db.DeleteMessages(messageIDs)
 }
+
+// GetNotificationsEnabled returns true if desktop notifications are enabled.
+// Defaults to true if the setting has not been configured.
+func (c *Client) GetNotificationsEnabled() bool {
+	val, err := c.db.GetSetting("notifications_enabled")
+	if err != nil || val == "" {
+		return true // default: notifications on
+	}
+	return val == "true"
+}
+
+// SetNotificationsEnabled persists the notification toggle preference.
+func (c *Client) SetNotificationsEnabled(enabled bool) error {
+	val := "false"
+	if enabled {
+		val = "true"
+	}
+	return c.db.SetSetting("notifications_enabled", val)
+}
