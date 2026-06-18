@@ -185,3 +185,24 @@ When completing a debugging task or a major architectural optimization:
   * When forwarding relay frames, ALWAYS pass through ALL fields from the incoming frame that the recipient needs. Do NOT construct minimal new frames — explicitly list every field that should be forwarded.
   * When adding new fields to `RelayFrame`, audit every place that constructs a `RelayFrame` to determine if the new field should be forwarded.
   * Also caught: `Ctrl+V` (verify) fired from chat focus, blocking paste. Guard state-transition shortcuts with focus checks when the shortcut conflicts with standard terminal behavior.
+
+---
+
+### CE-011: TOCTOU Race in ICE Negotiation Initiation
+* **Date:** 2026-06-18
+* **Symptom:** Two goroutines could simultaneously pass the `negotiations[peerUUID]` existence check and both spawn `doInitiate` goroutines, wasting an ICE agent allocation.
+* **Root Cause:** `InitiateConnection` checked `im.negotiations[peerUUID]` under the lock, released the lock, then spawned `go im.doInitiate()`. Between lock release and goroutine start, another call could pass the same check.
+* **Code Change / Fix:** Reserve a placeholder entry `im.negotiations[peerUUID] = &iceNegotiation{}` under the lock before spawning the goroutine. `doInitiate` replaces the placeholder with the real negotiation entry.
+* **Strict Rule to Prevent Regression:**
+  * When using check-then-act patterns with goroutine spawns, always reserve the slot under the lock BEFORE spawning the goroutine. Never release the lock between the check and the action that depends on it.
+
+---
+
+### CE-012: Relay Stores Ephemeral ICE Signaling Frames for Offline Peers
+* **Date:** 2026-06-18
+* **Symptom:** ICE offer/answer frames were persisted in the relay's message store when the recipient was offline. These frames are time-sensitive — by the time the peer reconnects, the sender's ICE agent has timed out and the frames are useless dead state.
+* **Root Cause:** `HandleRelay` treated all incoming frames uniformly — if the recipient was offline, the frame was stored for later delivery regardless of whether it was ephemeral signaling or a durable chat message.
+* **Code Change / Fix:** Added an ephemeral frame check at the top of the offline branch in `HandleRelay`. Parses the inner frame type and skips storage for `ice_offer` and `ice_answer`, responding with an `offline` frame instead.
+* **Strict Rule to Prevent Regression:**
+  * When adding new relay frame types that are ephemeral (signaling, presence, typing indicators), add them to the ephemeral check in `HandleRelay` so they are NOT stored for offline recipients.
+  * Only durable chat messages and read receipts should be stored for offline delivery.

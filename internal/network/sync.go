@@ -19,11 +19,12 @@ import (
 
 // Frame represents a protocol packet exchanged over TCP.
 type Frame struct {
-	Type     string      `json:"type"`               // "handshake", "sync_list", "sync_request", "msg"
-	UUID     string      `json:"uuid,omitempty"`     // Sender UUID for handshakes
-	Username string      `json:"username,omitempty"` // Sender Username for handshakes
-	Hashes   []string    `json:"hashes,omitempty"`   // List of message IDs for history sync
-	Message  *db.Message `json:"message,omitempty"`  // Single message object
+	Type      string          `json:"type"`                 // "handshake", "sync_list", "sync_request", "msg", "ice_offer", "ice_answer"
+	UUID      string          `json:"uuid,omitempty"`       // Sender UUID for handshakes
+	Username  string          `json:"username,omitempty"`   // Sender Username for handshakes
+	Hashes    []string        `json:"hashes,omitempty"`     // List of message IDs for history sync
+	Message   *db.Message     `json:"message,omitempty"`    // Single message object
+	ICESignal json.RawMessage `json:"ice_signal,omitempty"` // ICE negotiation data (ICESignal struct)
 }
 
 // PeerConnection wraps an active TCP connection to a peer.
@@ -75,6 +76,9 @@ type SyncManager struct {
 	OnMsgRecv       func(msg *db.Message)
 	OnPeerSync      func(peerUUID string)
 
+	// ICE NAT hole punching manager
+	iceManager *ICEManager
+
 	// Relay connection state
 	relayAddr   string
 	relayConn   net.Conn
@@ -95,7 +99,7 @@ const DefaultRelayAddr = "termtalk-relay.fly.dev:55558"
 
 // NewSyncManager creates a SyncManager instance.
 func NewSyncManager(localUUID, username string, tcpPort int, database *db.Database) *SyncManager {
-	return &SyncManager{
+	sm := &SyncManager{
 		localUUID:  localUUID,
 		username:   username,
 		db:         database,
@@ -104,6 +108,8 @@ func NewSyncManager(localUUID, username string, tcpPort int, database *db.Databa
 		activeConn: make(map[string]*PeerConnection),
 		stopChan:   make(chan struct{}),
 	}
+	sm.iceManager = NewICEManager(sm)
+	return sm
 }
 
 // SetRelayAddr sets the relay server address dynamically.
@@ -162,6 +168,11 @@ func (sm *SyncManager) Start(ctx context.Context) error {
 func (sm *SyncManager) Stop() {
 	sm.stopOnce.Do(func() {
 		close(sm.stopChan)
+
+		// Shut down ICE manager first
+		if sm.iceManager != nil {
+			sm.iceManager.Close()
+		}
 
 		sm.mu.Lock()
 		if sm.listener != nil {
@@ -891,6 +902,24 @@ func (sm *SyncManager) handleRelayFrame(senderUUID string, inner Frame) {
 		sm.handleSyncRequest(senderUUID, inner.Hashes, sendFunc)
 	case "msg":
 		sm.handleIncomingMessage(senderUUID, inner.Message)
+	case "ice_offer":
+		if sm.iceManager != nil {
+			signal, err := parseICESignal(inner)
+			if err != nil {
+				log.Printf("ice: failed to parse offer from %s: %v", senderUUID, err)
+				return
+			}
+			sm.iceManager.HandleOffer(senderUUID, signal)
+		}
+	case "ice_answer":
+		if sm.iceManager != nil {
+			signal, err := parseICESignal(inner)
+			if err != nil {
+				log.Printf("ice: failed to parse answer from %s: %v", senderUUID, err)
+				return
+			}
+			sm.iceManager.HandleAnswer(senderUUID, signal)
+		}
 	}
 }
 
@@ -936,6 +965,25 @@ func (sm *SyncManager) IsRelayOnline() bool {
 	sm.relayMu.Lock()
 	defer sm.relayMu.Unlock()
 	return sm.relayOnline
+}
+
+// AttemptICEConnection triggers an ICE NAT hole punching attempt to a peer.
+// If ICE succeeds, the connection is registered in activeConn and used for
+// direct messaging. If ICE fails, relay messaging continues as fallback.
+func (sm *SyncManager) AttemptICEConnection(peerUUID string) {
+	if sm.iceManager == nil {
+		return
+	}
+
+	// Don't attempt ICE if we already have a direct connection
+	sm.mu.Lock()
+	_, hasConn := sm.activeConn[peerUUID]
+	sm.mu.Unlock()
+	if hasConn {
+		return
+	}
+
+	sm.iceManager.InitiateConnection(peerUUID)
 }
 
 // ListenerPort returns the actual TCP port the listener is bound to.

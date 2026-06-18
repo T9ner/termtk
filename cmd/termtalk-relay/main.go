@@ -189,6 +189,21 @@ func (rs *RelayServer) HandleRelay(sender *ClientConn, frame protocol.RelayFrame
 			_ = sender.Send(protocol.RelayFrame{Type: "offline", Recipient: recipientUUID})
 		}
 	} else {
+		// Check if the inner frame is ephemeral (ICE signaling) — don't store these
+		// for offline peers because they expire when the sender's ICE agent times out.
+		if frame.Message != nil {
+			var inner struct {
+				Type string `json:"type"`
+			}
+			if err := json.Unmarshal(frame.Message, &inner); err == nil {
+				if inner.Type == "ice_offer" || inner.Type == "ice_answer" {
+					log.Printf("relay: dropping ephemeral %s frame for offline %s", inner.Type, recipientUUID[:8])
+					_ = sender.Send(protocol.RelayFrame{Type: "offline", Recipient: recipientUUID})
+					return
+				}
+			}
+		}
+
 		// Extract message ID for ack
 		messageID := ""
 		if frame.Message != nil {
