@@ -77,6 +77,10 @@ type Model struct {
 	UnreadCounts map[string]int               // contactUUID → unread count
 	OnlineUsers  map[string]protocol.UserInfo // uuid → presence info
 
+	// Typing indicator state
+	TypingUsers    map[string]int64 // contactUUID → unix timestamp of last typing frame
+	TypingDebounce int64            // unix timestamp of last sent typing frame
+
 	// User directory state
 	UserList         []protocol.UserInfo
 	UserListSelected int
@@ -111,6 +115,7 @@ func NewModel(c *client.Client) *Model {
 
 	m.UnreadCounts = make(map[string]int)
 	m.OnlineUsers = make(map[string]protocol.UserInfo)
+	m.TypingUsers = make(map[string]int64)
 
 	return m
 }

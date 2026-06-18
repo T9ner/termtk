@@ -40,6 +40,11 @@ type UserListEvent struct{ Users []protocol.UserInfo }
 
 func (UserListEvent) isEvent() {}
 
+// TypingEvent is fired when a typing indicator arrives from a contact.
+type TypingEvent struct{ SenderUUID string }
+
+func (TypingEvent) isEvent() {}
+
 // ReadAckEvent is fired when a read receipt arrives from a contact.
 type ReadAckEvent struct {
 	SenderUUID string
@@ -102,6 +107,9 @@ func New(dbPath string, tcpPort int) (*Client, error) {
 	}
 	c.syncMgr.OnUserList = func(users []protocol.UserInfo) {
 		c.events <- UserListEvent{Users: users}
+	}
+	c.syncMgr.OnTyping = func(senderUUID string) {
+		c.events <- TypingEvent{SenderUUID: senderUUID}
 	}
 
 	return c, nil
@@ -343,6 +351,11 @@ func (c *Client) MarkMessagesRead(messageIDs []string) error {
 // SetContactVerified sets the verified flag for a contact.
 func (c *Client) SetContactVerified(uuid string, verified bool) error {
 	return c.db.SetContactVerified(uuid, verified)
+}
+
+// SendTyping sends an ephemeral typing indicator to a contact via the relay.
+func (c *Client) SendTyping(recipientUUID string) error {
+	return c.syncMgr.SendTyping(recipientUUID)
 }
 
 // DeleteMessagesLocal removes messages from local DB only (delete for me).

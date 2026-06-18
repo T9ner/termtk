@@ -25,6 +25,7 @@ import "encoding/json"
 //   - "flush"          — relay→client: delivering stored messages on reconnect
 //   - "read_ack"       — client→relay→client: batch read receipt for messages
 //   - "delete"         — client→relay→client: delete messages by ID
+//   - "typing"         — client→relay→client: ephemeral typing indicator (not stored for offline peers)
 type RelayFrame struct {
 	Type            string          `json:"type"`                        // Frame type identifier
 	UUID            string          `json:"uuid,omitempty"`              // Client registration UUID

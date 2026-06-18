@@ -665,6 +665,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.UserListSelected = 0
 		cmds = append(cmds, m.ListenForEvents())
 
+	case client.TypingEvent:
+		m.TypingUsers[msg.SenderUUID] = time.Now().Unix()
+		// Re-trigger listener
+		cmds = append(cmds, m.ListenForEvents())
+
 	case client.ReadAckEvent:
 		// Incoming read receipt — update local message statuses
 		if err := m.Client.MarkMessagesRead(msg.MessageIDs); err != nil {

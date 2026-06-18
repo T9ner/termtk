@@ -196,7 +196,7 @@ func (rs *RelayServer) HandleRelay(sender *ClientConn, frame protocol.RelayFrame
 				Type string `json:"type"`
 			}
 			if err := json.Unmarshal(frame.Message, &inner); err == nil {
-				if inner.Type == "ice_offer" || inner.Type == "ice_answer" {
+				if inner.Type == "ice_offer" || inner.Type == "ice_answer" || inner.Type == "typing" {
 					log.Printf("relay: dropping ephemeral %s frame for offline %s", inner.Type, recipientUUID[:8])
 					_ = sender.Send(protocol.RelayFrame{Type: "offline", Recipient: recipientUUID})
 					return

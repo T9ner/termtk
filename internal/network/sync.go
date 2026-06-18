@@ -19,7 +19,7 @@ import (
 
 // Frame represents a protocol packet exchanged over TCP.
 type Frame struct {
-	Type      string          `json:"type"`                 // "handshake", "sync_list", "sync_request", "msg", "ice_offer", "ice_answer"
+	Type      string          `json:"type"`                 // "handshake", "sync_list", "sync_request", "msg", "ice_offer", "ice_answer", "typing"
 	UUID      string          `json:"uuid,omitempty"`       // Sender UUID for handshakes
 	Username  string          `json:"username,omitempty"`   // Sender Username for handshakes
 	Hashes    []string        `json:"hashes,omitempty"`     // List of message IDs for history sync
@@ -92,6 +92,7 @@ type SyncManager struct {
 	OnOnlineList   func(users []protocol.UserInfo)
 	OnReadAck      func(senderUUID string, messageIDs []string)
 	OnUserList     func(users []protocol.UserInfo)
+	OnTyping       func(senderUUID string)
 }
 
 // DefaultRelayAddr is the public TermTalk relay node hosted on Fly.io
@@ -920,6 +921,10 @@ func (sm *SyncManager) handleRelayFrame(senderUUID string, inner Frame) {
 			}
 			sm.iceManager.HandleAnswer(senderUUID, signal)
 		}
+	case "typing":
+		if sm.OnTyping != nil {
+			sm.OnTyping(senderUUID)
+		}
 	}
 }
 
@@ -1064,6 +1069,13 @@ func (sm *SyncManager) SendDeleteRequest(recipientUUID string, messageIDs []stri
 		Type:       "delete",
 		Recipient:  recipientUUID,
 		MessageIDs: messageIDs,
+	})
+}
+
+// SendTyping sends an ephemeral typing indicator frame to a peer via the relay.
+func (sm *SyncManager) SendTyping(recipientUUID string) error {
+	return sm.sendRelayFrame(recipientUUID, Frame{
+		Type: "typing",
 	})
 }
 

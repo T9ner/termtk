@@ -325,6 +325,14 @@ func (m Model) viewDashboard() string {
 		} else {
 			chatBuilder.WriteString(m.Viewport.View() + "\n\n")
 		}
+		// Show typing indicator if contact is typing (within 5 seconds)
+		if m.SelectedIdx >= 0 && m.SelectedIdx < len(m.Contacts) {
+			contact := m.Contacts[m.SelectedIdx]
+			if ts, ok := m.TypingUsers[contact.UUID]; ok && time.Now().Unix()-ts < 5 {
+				typingStyle := lipgloss.NewStyle().Foreground(grayColor).Italic(true)
+				chatBuilder.WriteString(typingStyle.Render(fmt.Sprintf("@%s is typing...", contact.Username)) + "\n")
+			}
+		}
 		chatBuilder.WriteString(m.MsgInput.View())
 	} else {
 		// No contact selected — welcome empty state
