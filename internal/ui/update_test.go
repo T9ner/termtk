@@ -119,12 +119,30 @@ func TestUpdate_Dashboard_EscQuits(t *testing.T) {
 // Test 5: Dashboard — Ctrl+N transitions to StateAddContact
 // ────────────────────────────────────────────────────────────────────
 
-func TestUpdate_Dashboard_CtrlN_AddContact(t *testing.T) {
+func TestUpdate_Dashboard_CtrlN_ToggleNotifications(t *testing.T) {
 	m, cleanup := newTestModel(t)
 	defer cleanup()
 
 	m.State = StateDashboard
 	msg := tea.KeyMsg{Type: tea.KeyCtrlN}
+	updated, _ := m.Update(msg)
+	um := updated.(Model)
+
+	// Ctrl+N should toggle notifications, not change state
+	if um.State != StateDashboard {
+		t.Errorf("expected StateDashboard (%d), got %d", StateDashboard, um.State)
+	}
+	if um.StatusMessage == "" {
+		t.Errorf("expected a status message about notifications toggle")
+	}
+}
+
+func TestUpdate_Dashboard_CtrlA_AddContact(t *testing.T) {
+	m, cleanup := newTestModel(t)
+	defer cleanup()
+
+	m.State = StateDashboard
+	msg := tea.KeyMsg{Type: tea.KeyCtrlA}
 	updated, _ := m.Update(msg)
 	um := updated.(Model)
 
