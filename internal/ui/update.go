@@ -128,6 +128,9 @@ func (m *Model) ReloadMessages() {
 	if err == nil {
 		m.ChatHistory = history
 
+		// Load reactions BEFORE rendering viewport content
+		m.RefreshReactions()
+
 		// Format chat transcript
 		var builder strings.Builder
 		width := m.Viewport.Width
@@ -185,7 +188,6 @@ func (m *Model) ReloadMessages() {
 		m.Viewport.SetContent(builder.String())
 		m.Viewport.GotoBottom()
 	}
-	m.RefreshReactions()
 }
 
 // Update processes Bubble Tea incoming events.

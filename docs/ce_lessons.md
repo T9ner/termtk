@@ -215,3 +215,13 @@ When completing a debugging task or a major architectural optimization:
   * New ephemeral frame types added in v0.5.0: `typing` (joins `ice_offer`, `ice_answer`)
   * New durable frame types added in v0.5.0: `reaction` (stored for offline peers like `msg`)
   * When merging parallel feature branches, resolve conflicts by keeping ALL additive code from both sides — never drop one side silently.
+
+### CE-014: RefreshReactions Called After SetContent — Stale Viewport Bug
+* **Date:** 2026-06-18
+* **Symptom:** Emoji reactions appeared to not work — pressing `r`, selecting an emoji, and confirming sent the reaction to DB, but nothing rendered below the message.
+* **Root Cause:** `ReloadMessages()` called `m.RefreshReactions()` **after** `m.Viewport.SetContent(builder.String())`. The viewport was built using stale/empty `m.ChatReactions`, then reactions were loaded into memory but never re-rendered.
+* **Code Change / Fix:** Moved `m.RefreshReactions()` call to run **before** the viewport content building loop, so `m.ChatReactions` is populated when the reaction display code runs.
+* **Strict Rule to Prevent Regression:**
+  * Always load dependent state (reactions, metadata) BEFORE building viewport content that consumes it.
+  * Pattern: fetch → enrich → render. Never render → enrich (stale data on first pass).
+  * Always run pre-merge-review skill before merging feature branches to catch render-ordering bugs.
