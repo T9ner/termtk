@@ -353,10 +353,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.Focus == FocusSidebar {
 					// Enter in sidebar selects the contact and switches to chat
 					if m.SelectedIdx >= 0 && m.SelectedIdx < len(m.Contacts) {
+						contactUUID := m.Contacts[m.SelectedIdx].UUID
 						m.Focus = FocusChat
 						m.MsgInput.Focus()
 						m.ReloadMessages()
 						m.sendReadReceipts()
+						// Trigger ICE hole punching for online peers
+						if _, online := m.OnlineUsers[contactUUID]; online {
+							go m.Client.AttemptICEConnection(contactUUID)
+						}
 					}
 				} else {
 					// Enter in chat sends a message
@@ -743,6 +748,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case client.TypingEvent:
 		m.TypingUsers[msg.SenderUUID] = time.Now().Unix()
+		// Re-trigger listener
+		cmds = append(cmds, m.ListenForEvents())
+
+	case client.ICEConnectedEvent:
+		m.ICEConnected[msg.PeerUUID] = msg.Direct
 		// Re-trigger listener
 		cmds = append(cmds, m.ListenForEvents())
 

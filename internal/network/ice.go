@@ -456,6 +456,11 @@ func (im *ICEManager) registerICEConnection(peerUUID string, conn net.Conn) {
 
 	log.Printf("ice: peer %s (%s) registered via ICE direct connection", im.shortUUID(pc.UUID), pc.Username)
 
+	// Notify client of successful ICE direct connection
+	if im.sm.OnICEStatus != nil {
+		im.sm.OnICEStatus(pc.UUID, true)
+	}
+
 	// Run the standard connection handler (reads frames until disconnect)
 	im.sm.wg.Add(1)
 	go im.sm.handleConnection(pc)

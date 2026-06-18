@@ -81,6 +81,9 @@ type Model struct {
 	TypingUsers    map[string]int64 // contactUUID → unix timestamp of last typing frame
 	TypingDebounce int64            // unix timestamp of last sent typing frame
 
+	// ICE connection status (peerUUID -> direct connection active)
+	ICEConnected map[string]bool
+
 	// User directory state
 	UserList         []protocol.UserInfo
 	UserListSelected int
@@ -124,6 +127,7 @@ func NewModel(c *client.Client) *Model {
 	m.TypingUsers = make(map[string]int64)
 	m.ChatReactions = make(map[string][]db.Reaction)
 	m.SelectedMsgIdx = -1
+	m.ICEConnected = make(map[string]bool)
 
 	return m
 }

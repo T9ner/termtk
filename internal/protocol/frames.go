@@ -27,6 +27,8 @@ import "encoding/json"
 //   - "delete"         — client→relay→client: delete messages by ID
 //   - "typing"         — client→relay→client: ephemeral typing indicator (not stored for offline peers)
 //   - "reaction"       — client→relay→client: emoji reaction on a message (via inner Frame)
+//   - "ice_offer"      — client→relay→client: ICE offer for NAT hole punching (ephemeral)
+//   - "ice_answer"     — client→relay→client: ICE answer for NAT hole punching (ephemeral)
 type RelayFrame struct {
 	Type            string          `json:"type"`                        // Frame type identifier
 	UUID            string          `json:"uuid,omitempty"`              // Client registration UUID

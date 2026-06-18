@@ -95,6 +95,7 @@ type SyncManager struct {
 	OnUserList     func(users []protocol.UserInfo)
 	OnTyping       func(senderUUID string)
 	OnReaction     func(reaction *db.Reaction)
+	OnICEStatus    func(peerUUID string, direct bool)
 }
 
 // DefaultRelayAddr is the public TermTalk relay node hosted on Fly.io
