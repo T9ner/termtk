@@ -291,6 +291,13 @@ func (c *Client) ConnectToPeer(ctx context.Context, contact *db.Contact) error {
 	return c.syncMgr.ConnectToPeer(ctx, contact)
 }
 
+// AttemptICEConnection triggers an ICE NAT hole punching attempt to a peer.
+// If ICE succeeds, the direct connection is used for messaging.
+// If ICE fails, relay messaging continues as fallback. Non-blocking.
+func (c *Client) AttemptICEConnection(peerUUID string) {
+	c.syncMgr.AttemptICEConnection(peerUUID)
+}
+
 // SearchUsers sends a search query to the relay server.
 // Results arrive asynchronously as a SearchResultEvent on the Events channel.
 func (c *Client) SearchUsers(query string) error {

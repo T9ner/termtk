@@ -109,6 +109,8 @@ func (im *ICEManager) InitiateConnection(peerUUID string) {
 		im.mu.Unlock()
 		return // negotiation already in progress
 	}
+	// Reserve slot to prevent duplicate goroutine spawns (TOCTOU fix)
+	im.negotiations[peerUUID] = &iceNegotiation{}
 	im.mu.Unlock()
 
 	go im.doInitiate(peerUUID)
