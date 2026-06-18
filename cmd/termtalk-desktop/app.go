@@ -11,6 +11,7 @@ import (
 
 	"termtalk/internal/client"
 	"termtalk/internal/db"
+	"termtalk/internal/ui"
 )
 
 // App struct holds the desktop application state and Wails bindings.
@@ -69,15 +70,25 @@ func (a *App) eventLoop(profile *db.Profile) {
 				"sender":  e.Message.Sender,
 				"content": e.Message.Content,
 			})
+			// A message arriving proves the sender is reachable
+			a.onlineMu.Lock()
+			a.onlineUsers[e.Message.Sender] = true
+			a.onlineMu.Unlock()
+			wailsruntime.EventsEmit(a.ctx, "contacts_changed")
 		case client.TypingEvent:
 			wailsruntime.EventsEmit(a.ctx, "typing", map[string]interface{}{
 				"sender": e.SenderUUID,
 			})
+			// Typing also proves the sender is reachable
+			a.onlineMu.Lock()
+			a.onlineUsers[e.SenderUUID] = true
+			a.onlineMu.Unlock()
 		case client.PeerDiscoveredEvent:
 			wailsruntime.EventsEmit(a.ctx, "peer_discovered", map[string]interface{}{
 				"uuid":     e.Contact.UUID,
 				"username": e.Contact.Username,
 			})
+			wailsruntime.EventsEmit(a.ctx, "contacts_changed")
 		case client.ReactionEvent:
 			wailsruntime.EventsEmit(a.ctx, "reaction", map[string]interface{}{
 				"messageId": e.Reaction.MessageID,
@@ -241,6 +252,7 @@ func (a *App) SendMessage(contactUUID string, content string) error {
 	if a.client == nil {
 		return fmt.Errorf("client not initialized")
 	}
+	content = ui.ReplaceShortcodes(content)
 	return a.client.SendMessage(contactUUID, content)
 }
 

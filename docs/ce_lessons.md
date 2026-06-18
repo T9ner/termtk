@@ -225,3 +225,30 @@ When completing a debugging task or a major architectural optimization:
   * Always load dependent state (reactions, metadata) BEFORE building viewport content that consumes it.
   * Pattern: fetch → enrich → render. Never render → enrich (stale data on first pass).
   * Always run pre-merge-review skill before merging feature branches to catch render-ordering bugs.
+
+### CE-012: Emoji Picker Enter Key Intercepted by KeyEnter Handler
+* **Date:** 2026-06-18
+* **Symptom:** Pressing Enter in the emoji reaction picker did nothing — the picker opened but reactions couldn't be confirmed.
+* **Root Cause:** In `update.go`, the `tea.KeyEnter` case was handled in the switch statement BEFORE the emoji picker check (which was in the `default` case). Enter was consumed by the message-send handler (which did nothing because input was empty), never reaching the picker.
+* **Code Change / Fix:** Added emoji picker open check at the TOP of the `tea.KeyEnter` case with early return, so it runs before sidebar/chat Enter handling.
+* **Strict Rule to Prevent Regression:**
+  * Modal UI states (emoji picker, confirmation dialogs) MUST be checked before any default key handling in the same switch case.
+  * Pattern: modal check first → early return → then normal key handling.
+
+### CE-013: Desktop Online Status — IsPeerOnline Only Checks LAN
+* **Date:** 2026-06-18
+* **Symptom:** Desktop app showed contacts as "Offline" even while actively exchanging messages through the relay.
+* **Root Cause:** `IsPeerOnline()` in `sync.go` only checks the `activeConn` map (direct LAN TCP connections). Relay-connected peers are invisible to it. The TUI worked around this by OR-ing with `OnlineUsers` (relay presence), but the desktop app only used `IsPeerOnline`.
+* **Code Change / Fix:** (1) Added `onlineUsers` map to desktop App struct, populated from `OnlineListEvent`. (2) `isUserOnline()` checks both LAN + relay. (3) Incoming messages and typing events also mark the sender as online.
+* **Strict Rule to Prevent Regression:**
+  * Any new client using `IsPeerOnline()` MUST also check relay presence. Use the composite `isUserOnline()` pattern.
+  * When adding a new frontend (mobile, web), always account for all connectivity tiers (LAN, relay, sneakernet).
+
+### CE-014: Missing Desktop Bindings — Feature Parity with TUI
+* **Date:** 2026-06-18
+* **Symptom:** Unread count badge never cleared on the desktop app after opening a chat. Also, emoji shortcodes weren't converted when sending from desktop.
+* **Root Cause:** Desktop `app.go` had `GetUnreadCount` binding but no `MarkMessagesRead`. Also `SendMessage` didn't apply `ReplaceShortcodes`. The TUI handled both in `sendReadReceipts()` and the Enter handler respectively.
+* **Code Change / Fix:** (1) Added `MarkMessagesRead` binding. (2) React frontend calls it on chat open + new message arrival. (3) Added `ui.ReplaceShortcodes(content)` to desktop `SendMessage`.
+* **Strict Rule to Prevent Regression:**
+  * When adding a Wails binding, audit the TUI's equivalent handler for ALL side effects (read receipts, shortcode conversion, typing indicators, etc.) and replicate them.
+  * Maintain a binding parity checklist: every TUI feature must have a desktop binding equivalent.

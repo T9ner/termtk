@@ -363,6 +363,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// When FocusChat, viewport scroll is handled below
 
 			case tea.KeyEnter:
+				// Handle emoji picker confirmation FIRST
+				if m.Focus == FocusChat && m.EmojiPickerOpen {
+					if m.SelectedMsgIdx >= 0 && m.SelectedMsgIdx < len(m.ChatHistory) &&
+						m.SelectedIdx >= 0 && m.SelectedIdx < len(m.Contacts) {
+						msgID := m.ChatHistory[m.SelectedMsgIdx].ID
+						contact := m.Contacts[m.SelectedIdx]
+						emoji := AvailableEmojis[m.EmojiPickerIdx]
+						_ = m.Client.SendReaction(contact.UUID, msgID, emoji)
+						m.RefreshReactions()
+					}
+					m.EmojiPickerOpen = false
+					m.MsgInput.Focus()
+					return m, nil
+				}
+
 				if m.Focus == FocusSidebar {
 					// Enter in sidebar selects the contact and switches to chat
 					if m.SelectedIdx >= 0 && m.SelectedIdx < len(m.Contacts) {

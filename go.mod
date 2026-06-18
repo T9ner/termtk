@@ -8,6 +8,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/gen2brain/beeep v0.11.2
 	github.com/google/uuid v1.6.0
+	github.com/mattn/go-runewidth v0.0.19
 	github.com/ncruces/go-sqlite3 v0.35.0
 	github.com/pion/ice/v4 v4.2.7
 	github.com/pion/stun/v3 v3.1.5
@@ -45,7 +46,6 @@ require (
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
-	github.com/mattn/go-runewidth v0.0.19 // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
