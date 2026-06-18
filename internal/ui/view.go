@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 	"termtalk/internal/db"
 )
 
@@ -102,6 +103,43 @@ var (
 				Underline(true)
 )
 
+// emojiShortcodes maps :name: shortcodes to Unicode emoji.
+var emojiShortcodes = map[string]string{
+	":thumbsup:":   "👍",
+	":thumbsdown:": "👎",
+	":heart:":      "❤️",
+	":fire:":       "🔥",
+	":laugh:":      "😂",
+	":smile:":      "😊",
+	":wink:":       "😉",
+	":cry:":        "😢",
+	":think:":      "🤔",
+	":clap:":       "👏",
+	":wave:":       "👋",
+	":eyes:":       "👀",
+	":check:":      "✅",
+	":x:":          "❌",
+	":star:":       "⭐",
+	":rocket:":     "🚀",
+	":party:":      "🎉",
+	":lock:":       "🔒",
+	":100:":        "💯",
+	":ok:":         "👌",
+	":pray:":       "🙏",
+	":skull:":      "💀",
+	":sun:":        "☀️",
+	":moon:":       "🌙",
+	":coffee:":     "☕",
+}
+
+// ReplaceShortcodes converts emoji shortcodes (e.g., :thumbsup:) to Unicode emoji.
+func ReplaceShortcodes(text string) string {
+	for code, emoji := range emojiShortcodes {
+		text = strings.ReplaceAll(text, code, emoji)
+	}
+	return text
+}
+
 // View renders the TUI screen based on the current state.
 func (m Model) View() string {
 	switch m.State {
@@ -193,20 +231,22 @@ func (m Model) viewProfile() string {
 
 // centerPad centers text within the given width, padding with spaces.
 func centerPad(text string, width int) string {
-	if len(text) >= width {
-		return text[:width]
+	w := runewidth.StringWidth(text)
+	if w >= width {
+		return runewidth.Truncate(text, width, "")
 	}
-	left := (width - len(text)) / 2
-	right := width - len(text) - left
+	left := (width - w) / 2
+	right := width - w - left
 	return strings.Repeat(" ", left) + text + strings.Repeat(" ", right)
 }
 
 // padRight pads text to the given width with trailing spaces.
 func padRight(text string, width int) string {
-	if len(text) >= width {
-		return text[:width]
+	w := runewidth.StringWidth(text)
+	if w >= width {
+		return runewidth.Truncate(text, width, "")
 	}
-	return text + strings.Repeat(" ", width-len(text))
+	return text + strings.Repeat(" ", width-w)
 }
 
 func (m Model) viewDashboard() string {
@@ -572,6 +612,7 @@ func (m Model) viewHelp() string {
 	writeKey("Ctrl+P", "View your profile")
 	writeKey("Ctrl+X", "Delete last sent message")
 	writeKey("r", "React to last message (chat)")
+	writeKey(":name:", "Emoji shortcodes (e.g. :heart: :fire: :thumbsup:)")
 	writeKey("Ctrl+L", "User directory")
 	sb.WriteString("\n")
 

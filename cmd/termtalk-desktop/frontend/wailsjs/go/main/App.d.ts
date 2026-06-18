@@ -18,6 +18,8 @@ export function GetOnlineUsers():Promise<void>;
 
 export function GetUnreadCount(arg1:string):Promise<number>;
 
+export function MarkMessagesRead(arg1:string):Promise<void>;
+
 export function Register(arg1:string):Promise<main.ContactInfo>;
 
 export function SearchUsers(arg1:string):Promise<void>;

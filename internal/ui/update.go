@@ -381,6 +381,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					text := strings.TrimSpace(m.MsgInput.Value())
 					if text != "" && m.SelectedIdx >= 0 {
 						contact := m.Contacts[m.SelectedIdx]
+						text = ReplaceShortcodes(text)
 						_ = m.Client.SendMessage(contact.UUID, text)
 						m.MsgInput.SetValue("")
 						m.ReloadMessages()

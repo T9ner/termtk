@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -14,17 +15,20 @@ import (
 
 // App struct holds the desktop application state and Wails bindings.
 type App struct {
-	ctx     context.Context
-	client  *client.Client
-	dbPath  string
-	dataDir string
+	ctx         context.Context
+	client      *client.Client
+	dbPath      string
+	dataDir     string
+	onlineUsers map[string]bool // relay-reported online users
+	onlineMu    sync.RWMutex
 }
 
 // NewApp creates a new App binding struct.
 func NewApp(dbPath, dataDir string) *App {
 	return &App{
-		dbPath:  dbPath,
-		dataDir: dataDir,
+		dbPath:      dbPath,
+		dataDir:     dataDir,
+		onlineUsers: make(map[string]bool),
 	}
 }
 
@@ -85,16 +89,35 @@ func (a *App) eventLoop(profile *db.Profile) {
 				"messageIds": e.MessageIDs,
 			})
 		case client.OnlineListEvent:
+			// Update local online users map for presence checks
+			a.onlineMu.Lock()
+			a.onlineUsers = make(map[string]bool)
 			var users []map[string]string
 			for _, u := range e.Users {
+				a.onlineUsers[u.UUID] = true
 				users = append(users, map[string]string{
 					"uuid":     u.UUID,
 					"username": u.Username,
 				})
 			}
+			a.onlineMu.Unlock()
 			wailsruntime.EventsEmit(a.ctx, "online_list", users)
+			// Also notify frontend to refresh contacts
+			wailsruntime.EventsEmit(a.ctx, "contacts_changed")
 		}
 	}
+}
+
+// isUserOnline checks both LAN (direct TCP) and relay presence.
+func (a *App) isUserOnline(uuid string) bool {
+	// Check LAN connection
+	if a.client.IsPeerOnline(uuid) {
+		return true
+	}
+	// Check relay-reported online status
+	a.onlineMu.RLock()
+	defer a.onlineMu.RUnlock()
+	return a.onlineUsers[uuid]
 }
 
 // shutdown is called by Wails when the app is closing.
@@ -179,7 +202,7 @@ func (a *App) GetContacts() ([]ContactInfo, error) {
 		result[i] = ContactInfo{
 			UUID:     c.UUID,
 			Username: c.Username,
-			Online:   a.client.IsPeerOnline(c.UUID),
+			Online:   a.isUserOnline(c.UUID),
 		}
 	}
 	return result, nil
@@ -304,4 +327,36 @@ func (a *App) GetOnlineUsers() error {
 		return fmt.Errorf("client not initialized")
 	}
 	return a.client.GetOnlineUsers()
+}
+
+// MarkMessagesRead marks messages as read locally and sends read receipts.
+func (a *App) MarkMessagesRead(contactUUID string) error {
+	if a.client == nil {
+		return fmt.Errorf("client not initialized")
+	}
+	profile := a.client.GetProfile()
+	if profile == nil {
+		return fmt.Errorf("no profile")
+	}
+	// Get unread messages from this contact
+	history, err := a.client.GetChatHistory(contactUUID)
+	if err != nil {
+		return err
+	}
+	var unreadIDs []string
+	for _, msg := range history {
+		if msg.Sender == contactUUID && msg.Status != "read" {
+			unreadIDs = append(unreadIDs, msg.ID)
+		}
+	}
+	if len(unreadIDs) == 0 {
+		return nil
+	}
+	// Mark as read in DB
+	if err := a.client.MarkMessagesRead(unreadIDs); err != nil {
+		return err
+	}
+	// Send read receipts to the sender
+	_ = a.client.SendReadAck(contactUUID, unreadIDs)
+	return nil
 }

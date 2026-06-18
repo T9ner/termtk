@@ -11,6 +11,8 @@ import {
   SendReaction,
   GetChatReactions,
   GetUnreadCount,
+  MarkMessagesRead,
+  GetOnlineUsers,
 } from '../wailsjs/go/main/App';
 
 interface Contact {
@@ -63,10 +65,16 @@ function App() {
       });
   }, []);
 
-  // Load contacts when registered
+  // Load contacts when registered + start periodic online user polling
   useEffect(() => {
     if (!registered) return;
     loadContacts();
+    // Request online users from relay immediately and every 15 seconds
+    GetOnlineUsers().catch(() => {});
+    const interval = setInterval(() => {
+      GetOnlineUsers().catch(() => {});
+    }, 15000);
+    return () => clearInterval(interval);
   }, [registered]);
 
   // Subscribe to Wails events
@@ -78,6 +86,8 @@ function App() {
         loadContacts();
         if (activeContact) {
           loadChat(activeContact.uuid);
+          // Auto-mark as read since the chat is open
+          MarkMessagesRead(activeContact.uuid).catch(() => {});
         }
       }),
       EventsOn('typing', (data: { sender: string }) => {
@@ -150,9 +160,19 @@ function App() {
     }
   };
 
-  const handleSelectContact = (contact: Contact) => {
+  const handleSelectContact = async (contact: Contact) => {
     setActiveContact(contact);
-    loadChat(contact.uuid);
+    await loadChat(contact.uuid);
+    // Mark messages as read when opening the chat
+    try {
+      await MarkMessagesRead(contact.uuid);
+      // Update the contact's unread count in sidebar
+      setContacts((prev) =>
+        prev.map((c) => (c.uuid === contact.uuid ? { ...c, unread: 0 } : c))
+      );
+    } catch (err) {
+      console.error('Failed to mark messages read:', err);
+    }
   };
 
   const handleSendMessage = async () => {

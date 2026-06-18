@@ -34,6 +34,10 @@ export function GetUnreadCount(arg1) {
   return window['go']['main']['App']['GetUnreadCount'](arg1);
 }
 
+export function MarkMessagesRead(arg1) {
+  return window['go']['main']['App']['MarkMessagesRead'](arg1);
+}
+
 export function Register(arg1) {
   return window['go']['main']['App']['Register'](arg1);
 }
