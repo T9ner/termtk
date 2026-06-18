@@ -129,3 +129,19 @@ func (m *Message) GenerateID() string {
 	hash := sha256.Sum256([]byte(raw))
 	return fmt.Sprintf("%x", hash)
 }
+
+// Reaction represents an emoji reaction on a message.
+type Reaction struct {
+	ID         string `json:"id"`
+	MessageID  string `json:"message_id"`
+	SenderUUID string `json:"sender_uuid"`
+	Emoji      string `json:"emoji"`
+	Timestamp  string `json:"timestamp"`
+}
+
+// GenerateReactionID computes a content-addressed SHA-256 ID for a reaction.
+func GenerateReactionID(messageID, senderUUID, emoji string) string {
+	raw := messageID + senderUUID + emoji
+	hash := sha256.Sum256([]byte(raw))
+	return fmt.Sprintf("%x", hash)
+}

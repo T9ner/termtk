@@ -66,6 +66,21 @@ func (m *Model) RefreshUnreadCounts() {
 	}
 }
 
+// RefreshReactions reloads reactions for the current chat.
+func (m *Model) RefreshReactions() {
+	if m.Client == nil || m.SelectedIdx < 0 || m.SelectedIdx >= len(m.Contacts) {
+		return
+	}
+	contact := m.Contacts[m.SelectedIdx]
+	reactions, err := m.Client.GetChatReactions(contact.UUID)
+	if err == nil {
+		m.ChatReactions = reactions
+	}
+}
+
+// AvailableEmojis is the set of emojis available in the picker.
+var AvailableEmojis = []string{"👍", "❤️", "😂", "🔥", "👀", "✅"}
+
 // sendReadReceipts marks messages from the current contact as read and sends a read_ack.
 func (m *Model) sendReadReceipts() {
 	if m.Client == nil || m.SelectedIdx < 0 || m.SelectedIdx >= len(m.Contacts) || m.LocalUser == nil {
@@ -142,11 +157,33 @@ func (m *Model) ReloadMessages() {
 				line = fmt.Sprintf("[%s] %s: %s%s", timestamp, contact.Username, msg.Content, encIcon)
 			}
 			builder.WriteString(msgStyle.Render(line) + "\n")
+
+			// Show grouped reactions below the message
+			if reactions, ok := m.ChatReactions[msg.ID]; ok && len(reactions) > 0 {
+				reactionCounts := make(map[string]int)
+				var order []string
+				for _, r := range reactions {
+					if reactionCounts[r.Emoji] == 0 {
+						order = append(order, r.Emoji)
+					}
+					reactionCounts[r.Emoji]++
+				}
+				var reactionStr strings.Builder
+				reactionStr.WriteString("    ")
+				for i, emoji := range order {
+					if i > 0 {
+						reactionStr.WriteString("  ")
+					}
+					reactionStr.WriteString(fmt.Sprintf("%s %d", emoji, reactionCounts[emoji]))
+				}
+				builder.WriteString(reactionStyle.Render(reactionStr.String()) + "\n")
+			}
 		}
 
 		m.Viewport.SetContent(builder.String())
 		m.Viewport.GotoBottom()
 	}
+	m.RefreshReactions()
 }
 
 // Update processes Bubble Tea incoming events.
@@ -392,6 +429,45 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				if m.Focus == FocusChat {
+					if m.EmojiPickerOpen {
+						// Handle emoji picker navigation
+						switch msg.String() {
+						case "left", "h":
+							if m.EmojiPickerIdx > 0 {
+								m.EmojiPickerIdx--
+							}
+						case "right", "l":
+							if m.EmojiPickerIdx < len(AvailableEmojis)-1 {
+								m.EmojiPickerIdx++
+							}
+						case "enter":
+							// Confirm reaction
+							if m.SelectedMsgIdx >= 0 && m.SelectedMsgIdx < len(m.ChatHistory) &&
+								m.SelectedIdx >= 0 && m.SelectedIdx < len(m.Contacts) {
+								msgID := m.ChatHistory[m.SelectedMsgIdx].ID
+								contact := m.Contacts[m.SelectedIdx]
+								emoji := AvailableEmojis[m.EmojiPickerIdx]
+								_ = m.Client.SendReaction(contact.UUID, msgID, emoji)
+								m.RefreshReactions()
+							}
+							m.EmojiPickerOpen = false
+							m.MsgInput.Focus()
+						case "esc":
+							m.EmojiPickerOpen = false
+							m.MsgInput.Focus()
+						}
+						return m, nil
+					}
+
+					// Open emoji picker on 'r' when not typing
+					if msg.String() == "r" && m.MsgInput.Value() == "" && len(m.ChatHistory) > 0 {
+						m.SelectedMsgIdx = len(m.ChatHistory) - 1
+						m.EmojiPickerIdx = 0
+						m.EmojiPickerOpen = true
+						m.MsgInput.Blur()
+						return m, nil
+					}
+
 					// Forward input keypresses to active chat input
 					var cmd tea.Cmd
 					m.MsgInput, cmd = m.MsgInput.Update(msg)
@@ -671,6 +747,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			log.Printf("ui: failed to process read_ack: %v", err)
 		}
 		m.ReloadMessages()
+		// Re-trigger listener
+		cmds = append(cmds, m.ListenForEvents())
+
+	case client.ReactionEvent:
+		// Incoming reaction
+		if msg.Reaction != nil && msg.Reaction.Timestamp == "" {
+			// Empty timestamp signals removal
+			if m.SelectedIdx >= 0 && m.SelectedIdx < len(m.Contacts) {
+				_ = m.Client.RemoveReaction(m.Contacts[m.SelectedIdx].UUID, msg.Reaction.MessageID, msg.Reaction.Emoji)
+			}
+		}
+		m.RefreshReactions()
 		// Re-trigger listener
 		cmds = append(cmds, m.ListenForEvents())
 

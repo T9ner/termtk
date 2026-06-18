@@ -70,6 +70,21 @@ var (
 			Padding(0, 1).
 			MarginBottom(1)
 
+	reactionStyle = lipgloss.NewStyle().
+			Foreground(grayColor).
+			Italic(true)
+
+	emojiPickerStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("#2A2A2A")).
+				Foreground(lipgloss.Color("#FFF")).
+				Padding(0, 1)
+
+	emojiSelectedStyle = lipgloss.NewStyle().
+				Background(primaryColor).
+				Foreground(lipgloss.Color("#FFF")).
+				Bold(true).
+				Padding(0, 1)
+
 	// Active-pane accent styles
 	sidebarActiveStyle = lipgloss.NewStyle().
 				Border(lipgloss.NormalBorder(), false, true, false, false).
@@ -325,6 +340,23 @@ func (m Model) viewDashboard() string {
 		} else {
 			chatBuilder.WriteString(m.Viewport.View() + "\n\n")
 		}
+
+		// Emoji picker overlay
+		if m.EmojiPickerOpen {
+			var pickerBuilder strings.Builder
+			pickerBuilder.WriteString("React: ")
+			for i, emoji := range AvailableEmojis {
+				if i == m.EmojiPickerIdx {
+					pickerBuilder.WriteString(emojiSelectedStyle.Render(emoji))
+				} else {
+					pickerBuilder.WriteString(emojiPickerStyle.Render(emoji))
+				}
+				pickerBuilder.WriteString(" ")
+			}
+			pickerBuilder.WriteString("  (←→ select, Enter confirm, Esc cancel)")
+			chatBuilder.WriteString(pickerBuilder.String() + "\n")
+		}
+
 		chatBuilder.WriteString(m.MsgInput.View())
 	} else {
 		// No contact selected — welcome empty state
@@ -376,7 +408,7 @@ func (m Model) dashboardFooter() string {
 		}
 		return "↑↓: Navigate  ·  Enter: Chat  ·  ?: Help"
 	}
-	return "Enter: Send  ·  Tab: Contacts  ·  ?: Help"
+	return "Enter: Send  ·  r: React  ·  Tab: Contacts  ·  ?: Help"
 }
 
 func (m Model) viewExport() string {
@@ -521,6 +553,7 @@ func (m Model) viewHelp() string {
 	writeKey("Ctrl+V", "Verify contact")
 	writeKey("Ctrl+P", "View your profile")
 	writeKey("Ctrl+X", "Delete last sent message")
+	writeKey("r", "React to last message (chat)")
 	writeKey("Ctrl+L", "User directory")
 	sb.WriteString("\n")
 

@@ -19,12 +19,13 @@ import (
 
 // Frame represents a protocol packet exchanged over TCP.
 type Frame struct {
-	Type      string          `json:"type"`                 // "handshake", "sync_list", "sync_request", "msg", "ice_offer", "ice_answer"
+	Type      string          `json:"type"`                 // "handshake", "sync_list", "sync_request", "msg", "ice_offer", "ice_answer", "reaction"
 	UUID      string          `json:"uuid,omitempty"`       // Sender UUID for handshakes
 	Username  string          `json:"username,omitempty"`   // Sender Username for handshakes
 	Hashes    []string        `json:"hashes,omitempty"`     // List of message IDs for history sync
 	Message   *db.Message     `json:"message,omitempty"`    // Single message object
 	ICESignal json.RawMessage `json:"ice_signal,omitempty"` // ICE negotiation data (ICESignal struct)
+	Reaction  *db.Reaction    `json:"reaction,omitempty"`   // Reaction data for emoji reactions
 }
 
 // PeerConnection wraps an active TCP connection to a peer.
@@ -92,6 +93,7 @@ type SyncManager struct {
 	OnOnlineList   func(users []protocol.UserInfo)
 	OnReadAck      func(senderUUID string, messageIDs []string)
 	OnUserList     func(users []protocol.UserInfo)
+	OnReaction     func(reaction *db.Reaction)
 }
 
 // DefaultRelayAddr is the public TermTalk relay node hosted on Fly.io
@@ -920,6 +922,16 @@ func (sm *SyncManager) handleRelayFrame(senderUUID string, inner Frame) {
 			}
 			sm.iceManager.HandleAnswer(senderUUID, signal)
 		}
+	case "reaction":
+		if inner.Reaction != nil {
+			// Save reaction to DB
+			if err := sm.db.AddReaction(inner.Reaction.ID, inner.Reaction.MessageID, inner.Reaction.SenderUUID, inner.Reaction.Emoji, inner.Reaction.Timestamp); err != nil {
+				log.Printf("sync: failed to save reaction: %v", err)
+			}
+			if sm.OnReaction != nil {
+				sm.OnReaction(inner.Reaction)
+			}
+		}
 	}
 }
 
@@ -1064,6 +1076,14 @@ func (sm *SyncManager) SendDeleteRequest(recipientUUID string, messageIDs []stri
 		Type:       "delete",
 		Recipient:  recipientUUID,
 		MessageIDs: messageIDs,
+	})
+}
+
+// SendReactionFrame sends a reaction frame to the recipient via relay.
+func (sm *SyncManager) SendReactionFrame(recipientUUID string, reaction *db.Reaction) error {
+	return sm.sendRelayFrame(recipientUUID, Frame{
+		Type:     "reaction",
+		Reaction: reaction,
 	})
 }
 
