@@ -206,3 +206,12 @@ When completing a debugging task or a major architectural optimization:
 * **Strict Rule to Prevent Regression:**
   * When adding new relay frame types that are ephemeral (signaling, presence, typing indicators), add them to the ephemeral check in `HandleRelay` so they are NOT stored for offline recipients.
   * Only durable chat messages and read receipts should be stored for offline delivery.
+
+### CE-013: v0.5.0 Parallel Feature Merge — Typing as Ephemeral Frame
+* **Date:** 2026-06-18
+* **Context:** v0.5.0 added 4 features via parallel branches: typing indicators, message reactions, ICE activation, OS notifications. All 4 branches touched `client.go`, `sync.go`, `update.go`, `model.go`, `view.go`.
+* **Key Decision:** `typing` frames added to the ephemeral check in `HandleRelay` alongside `ice_offer`/`ice_answer` (CE-012 compliance). Reactions are **NOT** ephemeral — they are durable and stored for offline delivery.
+* **Strict Rule to Prevent Regression:**
+  * New ephemeral frame types added in v0.5.0: `typing` (joins `ice_offer`, `ice_answer`)
+  * New durable frame types added in v0.5.0: `reaction` (stored for offline peers like `msg`)
+  * When merging parallel feature branches, resolve conflicts by keeping ALL additive code from both sides — never drop one side silently.
