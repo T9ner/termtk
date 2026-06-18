@@ -249,7 +249,14 @@ function App() {
   if (registered === null) {
     return (
       <div className="register-screen">
-        <h1>TermTalk</h1>
+        <div className="grain-overlay" />
+        <div className="register-logo">
+          <svg className="register-logo-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="4" y="4" width="40" height="40" rx="8" stroke="currentColor" strokeWidth="2.5" fill="none" />
+            <path d="M14 18h20M14 24h14M14 30h8" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+          </svg>
+          <h1>Terminal</h1>
+        </div>
         <p>Loading...</p>
       </div>
     );
@@ -258,10 +265,18 @@ function App() {
   if (!registered) {
     return (
       <div className="register-screen">
-        <h1>TermTalk</h1>
+        <div className="grain-overlay" />
+        <div className="register-logo">
+          <svg className="register-logo-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="4" y="4" width="40" height="40" rx="8" stroke="currentColor" strokeWidth="2.5" fill="none" />
+            <path d="M14 18h20M14 24h14M14 30h8" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+          </svg>
+          <h1>Terminal</h1>
+        </div>
+        <span className="register-tagline">Communication that never breaks</span>
         <p>
-          Communication that never breaks. Works on internet, campus LAN, or
-          completely offline. Choose a username to get started.
+          Works on internet, campus LAN, or completely offline.
+          Choose a username to get started.
         </p>
         <div className="register-form">
           <input
@@ -281,6 +296,7 @@ function App() {
   // ---- Main Chat UI ----
   return (
     <div className="app-layout">
+      <div className="grain-overlay" />
       {/* Sidebar */}
       <div className="sidebar">
         <div className="sidebar-header">
@@ -355,7 +371,12 @@ function App() {
       <div className="chat-area">
         {!activeContact ? (
           <div className="no-chat-selected">
-            <div className="icon">💬</div>
+            <div className="icon">
+              <svg viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="4" y="4" width="48" height="48" rx="12" stroke="currentColor" strokeWidth="2" />
+                <path d="M18 22h20M18 28h16M18 34h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </div>
             <p>Select a contact to start chatting</p>
           </div>
         ) : (
@@ -428,7 +449,9 @@ function App() {
                   onClick={handleSendMessage}
                   disabled={!inputText.trim()}
                 >
-                  ↑
+                  <svg viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3.5 17L17.5 10L3.5 3V8.5L12 10L3.5 11.5V17Z" />
+                  </svg>
                 </button>
               </div>
             </div>
