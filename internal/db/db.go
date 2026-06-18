@@ -122,6 +122,19 @@ func (d *Database) migrate() error {
 		return err
 	}
 
+	// Reactions table (v0.5.0)
+	_, err := d.conn.Exec(`CREATE TABLE IF NOT EXISTS reactions (
+		id TEXT PRIMARY KEY,
+		message_id TEXT NOT NULL,
+		sender_uuid TEXT NOT NULL,
+		emoji TEXT NOT NULL,
+		timestamp TEXT NOT NULL,
+		UNIQUE(message_id, sender_uuid, emoji)
+	)`)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -441,4 +454,73 @@ func (d *Database) DeleteMessages(messageIDs []string) error {
 	query := fmt.Sprintf("DELETE FROM messages WHERE id IN (%s)", strings.Join(placeholders, ","))
 	_, err := d.conn.Exec(query, args...)
 	return err
+}
+
+// AddReaction inserts a reaction into the database.
+func (d *Database) AddReaction(id, messageID, senderUUID, emoji, timestamp string) error {
+	_, err := d.conn.Exec(
+		`INSERT INTO reactions (id, message_id, sender_uuid, emoji, timestamp)
+		 VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT(message_id, sender_uuid, emoji) DO NOTHING`,
+		id, messageID, senderUUID, emoji, timestamp,
+	)
+	return err
+}
+
+// RemoveReaction deletes a reaction from the database.
+func (d *Database) RemoveReaction(messageID, senderUUID, emoji string) error {
+	_, err := d.conn.Exec(
+		"DELETE FROM reactions WHERE message_id = ? AND sender_uuid = ? AND emoji = ?",
+		messageID, senderUUID, emoji,
+	)
+	return err
+}
+
+// GetReactions returns all reactions for a given message.
+func (d *Database) GetReactions(messageID string) ([]Reaction, error) {
+	rows, err := d.conn.Query(
+		"SELECT id, message_id, sender_uuid, emoji, timestamp FROM reactions WHERE message_id = ? ORDER BY timestamp ASC",
+		messageID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var reactions []Reaction
+	for rows.Next() {
+		var r Reaction
+		if err := rows.Scan(&r.ID, &r.MessageID, &r.SenderUUID, &r.Emoji, &r.Timestamp); err != nil {
+			return nil, err
+		}
+		reactions = append(reactions, r)
+	}
+	return reactions, nil
+}
+
+// GetChatReactions returns a map of messageID to reactions for all messages in a chat.
+func (d *Database) GetChatReactions(senderUUID, recipientUUID string) (map[string][]Reaction, error) {
+	rows, err := d.conn.Query(
+		`SELECT r.id, r.message_id, r.sender_uuid, r.emoji, r.timestamp
+		 FROM reactions r
+		 INNER JOIN messages m ON r.message_id = m.id
+		 WHERE (m.sender_uuid = ? AND m.recipient_uuid = ?)
+		    OR (m.sender_uuid = ? AND m.recipient_uuid = ?)
+		 ORDER BY r.timestamp ASC`,
+		senderUUID, recipientUUID, recipientUUID, senderUUID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string][]Reaction)
+	for rows.Next() {
+		var r Reaction
+		if err := rows.Scan(&r.ID, &r.MessageID, &r.SenderUUID, &r.Emoji, &r.Timestamp); err != nil {
+			return nil, err
+		}
+		result[r.MessageID] = append(result[r.MessageID], r)
+	}
+	return result, nil
 }

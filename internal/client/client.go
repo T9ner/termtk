@@ -53,6 +53,11 @@ type ReadAckEvent struct {
 
 func (ReadAckEvent) isEvent() {}
 
+// ReactionEvent is fired when a reaction is received.
+type ReactionEvent struct{ Reaction *db.Reaction }
+
+func (ReactionEvent) isEvent() {}
+
 // Client is the unified coordinator for the TermTalk application.
 // It encapsulates the Database, PeerDiscovery daemon, and SyncManager
 // behind a single, testable interface so the TUI never touches
@@ -110,6 +115,9 @@ func New(dbPath string, tcpPort int) (*Client, error) {
 	}
 	c.syncMgr.OnTyping = func(senderUUID string) {
 		c.events <- TypingEvent{SenderUUID: senderUUID}
+	}
+	c.syncMgr.OnReaction = func(reaction *db.Reaction) {
+		c.events <- ReactionEvent{Reaction: reaction}
 	}
 
 	return c, nil
@@ -369,4 +377,88 @@ func (c *Client) DeleteMessagesForEveryone(contactUUID string, messageIDs []stri
 		return err
 	}
 	return c.db.DeleteMessages(messageIDs)
+}
+
+// SendReaction sends (or toggles off) an emoji reaction on a message.
+func (c *Client) SendReaction(recipientUUID, messageID, emoji string) error {
+	c.mu.RLock()
+	p := c.profile
+	c.mu.RUnlock()
+	if p == nil {
+		return fmt.Errorf("client: no local profile loaded")
+	}
+
+	id := db.GenerateReactionID(messageID, p.UUID, emoji)
+	ts := time.Now().UTC().Format(time.RFC3339)
+
+	// Toggle: check if reaction already exists
+	existing, err := c.db.GetReactions(messageID)
+	if err != nil {
+		return err
+	}
+	for _, r := range existing {
+		if r.SenderUUID == p.UUID && r.Emoji == emoji {
+			// Already reacted with same emoji - remove it (toggle)
+			return c.RemoveReaction(recipientUUID, messageID, emoji)
+		}
+	}
+
+	reaction := &db.Reaction{
+		ID:         id,
+		MessageID:  messageID,
+		SenderUUID: p.UUID,
+		Emoji:      emoji,
+		Timestamp:  ts,
+	}
+
+	if err := c.db.AddReaction(id, messageID, p.UUID, emoji, ts); err != nil {
+		return err
+	}
+
+	// Send to peer via relay
+	go func() {
+		_ = c.syncMgr.SendReactionFrame(recipientUUID, reaction)
+	}()
+
+	return nil
+}
+
+// RemoveReaction removes a reaction and notifies the peer.
+func (c *Client) RemoveReaction(recipientUUID, messageID, emoji string) error {
+	c.mu.RLock()
+	p := c.profile
+	c.mu.RUnlock()
+	if p == nil {
+		return fmt.Errorf("client: no local profile loaded")
+	}
+
+	if err := c.db.RemoveReaction(messageID, p.UUID, emoji); err != nil {
+		return err
+	}
+
+	// Send a removal frame (empty timestamp signals removal)
+	id := db.GenerateReactionID(messageID, p.UUID, emoji)
+	reaction := &db.Reaction{
+		ID:         id,
+		MessageID:  messageID,
+		SenderUUID: p.UUID,
+		Emoji:      emoji,
+		Timestamp:  "",
+	}
+	go func() {
+		_ = c.syncMgr.SendReactionFrame(recipientUUID, reaction)
+	}()
+
+	return nil
+}
+
+// GetChatReactions returns reactions for all messages in a chat.
+func (c *Client) GetChatReactions(contactUUID string) (map[string][]db.Reaction, error) {
+	c.mu.RLock()
+	p := c.profile
+	c.mu.RUnlock()
+	if p == nil {
+		return nil, fmt.Errorf("client: no local profile loaded")
+	}
+	return c.db.GetChatReactions(p.UUID, contactUUID)
 }

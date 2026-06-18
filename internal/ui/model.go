@@ -84,6 +84,12 @@ type Model struct {
 	// User directory state
 	UserList         []protocol.UserInfo
 	UserListSelected int
+
+	// Reaction state
+	EmojiPickerOpen bool
+	EmojiPickerIdx  int
+	SelectedMsgIdx  int
+	ChatReactions   map[string][]db.Reaction
 }
 
 // NewModel initializes the Bubble Tea model with the Client reference.
@@ -116,6 +122,8 @@ func NewModel(c *client.Client) *Model {
 	m.UnreadCounts = make(map[string]int)
 	m.OnlineUsers = make(map[string]protocol.UserInfo)
 	m.TypingUsers = make(map[string]int64)
+	m.ChatReactions = make(map[string][]db.Reaction)
+	m.SelectedMsgIdx = -1
 
 	return m
 }
