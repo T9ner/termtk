@@ -77,6 +77,9 @@ type Model struct {
 	UnreadCounts map[string]int               // contactUUID → unread count
 	OnlineUsers  map[string]protocol.UserInfo // uuid → presence info
 
+	// ICE connection status (peerUUID -> direct connection active)
+	ICEConnected map[string]bool
+
 	// User directory state
 	UserList         []protocol.UserInfo
 	UserListSelected int
@@ -111,6 +114,7 @@ func NewModel(c *client.Client) *Model {
 
 	m.UnreadCounts = make(map[string]int)
 	m.OnlineUsers = make(map[string]protocol.UserInfo)
+	m.ICEConnected = make(map[string]bool)
 
 	return m
 }

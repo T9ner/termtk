@@ -310,7 +310,16 @@ func (m Model) viewDashboard() string {
 		if m.Client.IsPeerOnline(contact.UUID) || relayOnline {
 			statusText = "online"
 		}
-		chatHeaderText := fmt.Sprintf("Chatting with %s (%s)", contact.Username, statusText)
+		// ICE connection status indicator
+		connIndicator := ""
+		if m.Client.IsPeerOnline(contact.UUID) || relayOnline {
+			if m.ICEConnected[contact.UUID] {
+				connIndicator = lipgloss.NewStyle().Foreground(accentColor).Bold(true).Render(" [direct]")
+			} else {
+				connIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFAF00")).Render(" [relay]")
+			}
+		}
+		chatHeaderText := fmt.Sprintf("Chatting with %s (%s)", contact.Username, statusText) + connIndicator
 		if m.Focus == FocusChat {
 			chatBuilder.WriteString(chatHeaderActiveStyle.Render(chatHeaderText) + "\n\n")
 		} else {

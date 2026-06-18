@@ -40,6 +40,14 @@ type UserListEvent struct{ Users []protocol.UserInfo }
 
 func (UserListEvent) isEvent() {}
 
+// ICEConnectedEvent is fired when an ICE connection succeeds or falls back to relay.
+type ICEConnectedEvent struct {
+	PeerUUID string
+	Direct   bool
+}
+
+func (ICEConnectedEvent) isEvent() {}
+
 // ReadAckEvent is fired when a read receipt arrives from a contact.
 type ReadAckEvent struct {
 	SenderUUID string
@@ -102,6 +110,9 @@ func New(dbPath string, tcpPort int) (*Client, error) {
 	}
 	c.syncMgr.OnUserList = func(users []protocol.UserInfo) {
 		c.events <- UserListEvent{Users: users}
+	}
+	c.syncMgr.OnICEStatus = func(peerUUID string, direct bool) {
+		c.events <- ICEConnectedEvent{PeerUUID: peerUUID, Direct: direct}
 	}
 
 	return c, nil

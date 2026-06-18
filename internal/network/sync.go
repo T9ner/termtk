@@ -92,6 +92,7 @@ type SyncManager struct {
 	OnOnlineList   func(users []protocol.UserInfo)
 	OnReadAck      func(senderUUID string, messageIDs []string)
 	OnUserList     func(users []protocol.UserInfo)
+	OnICEStatus    func(peerUUID string, direct bool)
 }
 
 // DefaultRelayAddr is the public TermTalk relay node hosted on Fly.io

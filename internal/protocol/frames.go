@@ -25,6 +25,8 @@ import "encoding/json"
 //   - "flush"          — relay→client: delivering stored messages on reconnect
 //   - "read_ack"       — client→relay→client: batch read receipt for messages
 //   - "delete"         — client→relay→client: delete messages by ID
+//   - "ice_offer"      — client→relay→client: ICE offer for NAT hole punching (ephemeral)
+//   - "ice_answer"     — client→relay→client: ICE answer for NAT hole punching (ephemeral)
 type RelayFrame struct {
 	Type            string          `json:"type"`                        // Frame type identifier
 	UUID            string          `json:"uuid,omitempty"`              // Client registration UUID
