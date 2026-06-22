@@ -4,11 +4,25 @@ import {main} from '../models';
 
 export function AddContact(arg1:string,arg2:string):Promise<void>;
 
+export function ArchiveContact(arg1:string,arg2:boolean):Promise<void>;
+
+export function BlockContact(arg1:string,arg2:boolean):Promise<void>;
+
+export function ChangeUsername(arg1:string):Promise<void>;
+
 export function DeleteContact(arg1:string):Promise<void>;
+
+export function DeleteMessagesForEveryone(arg1:string,arg2:Array<string>):Promise<void>;
+
+export function DeleteMessagesLocal(arg1:Array<string>):Promise<void>;
+
+export function EditMessageContent(arg1:string,arg2:string):Promise<void>;
 
 export function GetChatHistory(arg1:string):Promise<Array<main.MessageInfo>>;
 
 export function GetChatReactions(arg1:string):Promise<Record<string, Array<main.ReactionInfo>>>;
+
+export function GetContact(arg1:string):Promise<main.ContactInfo>;
 
 export function GetContacts():Promise<Array<main.ContactInfo>>;
 
@@ -18,9 +32,15 @@ export function GetOnlineUsers():Promise<void>;
 
 export function GetUnreadCount(arg1:string):Promise<number>;
 
+export function ListUsers():Promise<void>;
+
 export function MarkMessagesRead(arg1:string):Promise<void>;
 
+export function PinContact(arg1:string,arg2:boolean):Promise<void>;
+
 export function Register(arg1:string):Promise<main.ContactInfo>;
+
+export function SearchMessages(arg1:string,arg2:number):Promise<Array<main.MessageInfo>>;
 
 export function SearchUsers(arg1:string):Promise<void>;
 

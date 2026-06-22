@@ -128,6 +128,24 @@ func (a *App) eventLoop(profile *db.Profile) {
 			wailsruntime.EventsEmit(a.ctx, "online_list", users)
 			// Also notify frontend to refresh contacts
 			wailsruntime.EventsEmit(a.ctx, "contacts_changed")
+		case client.SearchResultEvent:
+			var users []map[string]string
+			for _, u := range e.Users {
+				users = append(users, map[string]string{
+					"uuid":     u.UUID,
+					"username": u.Username,
+				})
+			}
+			wailsruntime.EventsEmit(a.ctx, "search_results", users)
+		case client.UserListEvent:
+			var users []map[string]string
+			for _, u := range e.Users {
+				users = append(users, map[string]string{
+					"uuid":     u.UUID,
+					"username": u.Username,
+				})
+			}
+			wailsruntime.EventsEmit(a.ctx, "user_list", users)
 		}
 	}
 }
@@ -160,9 +178,14 @@ func (a *App) shutdown(ctx context.Context) {
 
 // ContactInfo is the JSON-friendly struct sent to the frontend.
 type ContactInfo struct {
-	UUID     string `json:"uuid"`
-	Username string `json:"username"`
-	Online   bool   `json:"online"`
+	UUID        string `json:"uuid"`
+	Username    string `json:"username"`
+	Online      bool   `json:"online"`
+	Pinned      bool   `json:"pinned"`
+	Archived    bool   `json:"archived"`
+	Blocked     bool   `json:"blocked"`
+	UnreadCount int    `json:"unread_count"`
+	LastSeen    string `json:"last_seen"`
 }
 
 // MessageInfo is the JSON-friendly struct for chat messages.
@@ -174,6 +197,8 @@ type MessageInfo struct {
 	Status    string `json:"status"`
 	Encrypted bool   `json:"encrypted"`
 	IsMe      bool   `json:"isMe"`
+	Edited    bool   `json:"edited"`
+	ReplyTo   string `json:"replyTo,omitempty"`
 }
 
 // ReactionInfo is the JSON-friendly struct for message reactions.
@@ -228,10 +253,16 @@ func (a *App) GetContacts() ([]ContactInfo, error) {
 	}
 	result := make([]ContactInfo, len(contacts))
 	for i, c := range contacts {
+		unread, _ := a.client.GetUnreadCount(c.UUID)
 		result[i] = ContactInfo{
-			UUID:     c.UUID,
-			Username: c.Username,
-			Online:   a.isUserOnline(c.UUID),
+			UUID:        c.UUID,
+			Username:    c.Username,
+			Online:      a.isUserOnline(c.UUID),
+			Pinned:      c.Pinned,
+			Archived:    c.Archived,
+			Blocked:     c.Blocked,
+			UnreadCount: unread,
+			LastSeen:    c.LastSeen.Format(time.RFC3339),
 		}
 	}
 	return result, nil
@@ -260,6 +291,8 @@ func (a *App) GetChatHistory(contactUUID string) ([]MessageInfo, error) {
 			Status:    msg.Status,
 			Encrypted: msg.Encrypted,
 			IsMe:      msg.Sender == profile.UUID,
+			Edited:    msg.Edited,
+			ReplyTo:   msg.ReplyTo,
 		}
 	}
 	return result, nil
@@ -389,4 +422,133 @@ func (a *App) MarkMessagesRead(contactUUID string) error {
 	// Send read receipts to the sender
 	_ = a.client.SendReadAck(contactUUID, unreadIDs)
 	return nil
+}
+
+// ChangeUsername updates the user's display name.
+func (a *App) ChangeUsername(newName string) error {
+	if a.client == nil {
+		return fmt.Errorf("client not initialized")
+	}
+	return a.client.ChangeUsername(newName)
+}
+
+// PinContact pins or unpins a contact.
+func (a *App) PinContact(uuid string, pinned bool) error {
+	if a.client == nil {
+		return fmt.Errorf("client not initialized")
+	}
+	if pinned {
+		return a.client.PinContact(uuid)
+	}
+	return a.client.UnpinContact(uuid)
+}
+
+// ArchiveContact archives or unarchives a contact.
+func (a *App) ArchiveContact(uuid string, archived bool) error {
+	if a.client == nil {
+		return fmt.Errorf("client not initialized")
+	}
+	if archived {
+		return a.client.ArchiveContact(uuid)
+	}
+	return a.client.UnarchiveContact(uuid)
+}
+
+// BlockContact blocks or unblocks a contact.
+func (a *App) BlockContact(uuid string, blocked bool) error {
+	if a.client == nil {
+		return fmt.Errorf("client not initialized")
+	}
+	if blocked {
+		return a.client.BlockContact(uuid)
+	}
+	return a.client.UnblockContact(uuid)
+}
+
+// DeleteMessagesLocal removes messages from the local database only.
+func (a *App) DeleteMessagesLocal(messageIDs []string) error {
+	if a.client == nil {
+		return fmt.Errorf("client not initialized")
+	}
+	return a.client.DeleteMessagesLocal(messageIDs)
+}
+
+// DeleteMessagesForEveryone deletes messages locally and requests deletion on the remote side.
+func (a *App) DeleteMessagesForEveryone(contactUUID string, messageIDs []string) error {
+	if a.client == nil {
+		return fmt.Errorf("client not initialized")
+	}
+	return a.client.DeleteMessagesForEveryone(contactUUID, messageIDs)
+}
+
+// EditMessageContent updates a message's content and marks it as edited.
+func (a *App) EditMessageContent(messageID string, content string) error {
+	if a.client == nil {
+		return fmt.Errorf("client not initialized")
+	}
+	return a.client.EditMessageContent(messageID, content)
+}
+
+// ListUsers requests the full user directory from the relay.
+// Results arrive asynchronously via the user_list event.
+func (a *App) ListUsers() error {
+	if a.client == nil {
+		return fmt.Errorf("client not initialized")
+	}
+	return a.client.ListUsers()
+}
+
+// SearchMessages performs a full-text search across all messages.
+func (a *App) SearchMessages(query string, limit int) ([]MessageInfo, error) {
+	if a.client == nil {
+		return nil, fmt.Errorf("client not initialized")
+	}
+	profile := a.client.GetProfile()
+	if profile == nil {
+		return nil, fmt.Errorf("no profile")
+	}
+	msgs, err := a.client.SearchMessages(query, limit)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]MessageInfo, len(msgs))
+	for i, msg := range msgs {
+		result[i] = MessageInfo{
+			ID:        msg.ID,
+			Sender:    msg.Sender,
+			Content:   msg.Content,
+			Timestamp: msg.Timestamp.Format(time.RFC3339),
+			Status:    msg.Status,
+			Encrypted: msg.Encrypted,
+			IsMe:      msg.Sender == profile.UUID,
+			Edited:    msg.Edited,
+			ReplyTo:   msg.ReplyTo,
+		}
+	}
+	return result, nil
+}
+
+// GetContact returns a single contact's info by UUID.
+func (a *App) GetContact(uuid string) (*ContactInfo, error) {
+	if a.client == nil {
+		return nil, fmt.Errorf("client not initialized")
+	}
+	c, err := a.client.GetContact(uuid)
+	if err != nil {
+		return nil, err
+	}
+	if c == nil {
+		return nil, fmt.Errorf("contact not found")
+	}
+	unread, _ := a.client.GetUnreadCount(c.UUID)
+	return &ContactInfo{
+		UUID:        c.UUID,
+		Username:    c.Username,
+		Online:      a.isUserOnline(c.UUID),
+		Pinned:      c.Pinned,
+		Archived:    c.Archived,
+		Blocked:     c.Blocked,
+		UnreadCount: unread,
+		LastSeen:    c.LastSeen.Format(time.RFC3339),
+	}, nil
 }

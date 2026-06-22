@@ -6,8 +6,32 @@ export function AddContact(arg1, arg2) {
   return window['go']['main']['App']['AddContact'](arg1, arg2);
 }
 
+export function ArchiveContact(arg1, arg2) {
+  return window['go']['main']['App']['ArchiveContact'](arg1, arg2);
+}
+
+export function BlockContact(arg1, arg2) {
+  return window['go']['main']['App']['BlockContact'](arg1, arg2);
+}
+
+export function ChangeUsername(arg1) {
+  return window['go']['main']['App']['ChangeUsername'](arg1);
+}
+
 export function DeleteContact(arg1) {
   return window['go']['main']['App']['DeleteContact'](arg1);
+}
+
+export function DeleteMessagesForEveryone(arg1, arg2) {
+  return window['go']['main']['App']['DeleteMessagesForEveryone'](arg1, arg2);
+}
+
+export function DeleteMessagesLocal(arg1) {
+  return window['go']['main']['App']['DeleteMessagesLocal'](arg1);
+}
+
+export function EditMessageContent(arg1, arg2) {
+  return window['go']['main']['App']['EditMessageContent'](arg1, arg2);
 }
 
 export function GetChatHistory(arg1) {
@@ -16,6 +40,10 @@ export function GetChatHistory(arg1) {
 
 export function GetChatReactions(arg1) {
   return window['go']['main']['App']['GetChatReactions'](arg1);
+}
+
+export function GetContact(arg1) {
+  return window['go']['main']['App']['GetContact'](arg1);
 }
 
 export function GetContacts() {
@@ -34,12 +62,24 @@ export function GetUnreadCount(arg1) {
   return window['go']['main']['App']['GetUnreadCount'](arg1);
 }
 
+export function ListUsers() {
+  return window['go']['main']['App']['ListUsers']();
+}
+
 export function MarkMessagesRead(arg1) {
   return window['go']['main']['App']['MarkMessagesRead'](arg1);
 }
 
+export function PinContact(arg1, arg2) {
+  return window['go']['main']['App']['PinContact'](arg1, arg2);
+}
+
 export function Register(arg1) {
   return window['go']['main']['App']['Register'](arg1);
+}
+
+export function SearchMessages(arg1, arg2) {
+  return window['go']['main']['App']['SearchMessages'](arg1, arg2);
 }
 
 export function SearchUsers(arg1) {
