@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import React from 'react';
 import { EventsOn } from '../wailsjs/runtime/runtime';
+import nodLogo from './assets/images/nod-logo.jpg';
 import {
   GetLocalUser,
   Register,
@@ -152,7 +153,7 @@ function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     const saved = localStorage.getItem('nod-theme');
     if (saved === 'light' || saved === 'dark') return saved;
-    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    return 'light';
   });
 
   // Feature P7: Global search
@@ -700,33 +701,84 @@ function App() {
 
   if (registered === null) {
     return (
-      <div className="empty-state">
-        <div className="empty-state-text">Connecting…</div>
+      <div className="entrance-screen">
+        <div className="entrance-splash">
+          <img src={nodLogo} alt="Nod" className="entrance-logo entrance-logo-pulse" />
+          <div className="entrance-loading-text">Connecting…</div>
+        </div>
       </div>
     );
   }
 
   if (!registered) {
     return (
-      <div className="register-screen">
-        <div className="register-card">
-          <div className="register-title">Nod</div>
-          <div className="register-subtitle">Communication that never breaks</div>
-          <input
-            className="register-input"
-            placeholder="Choose a username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleRegister()}
-            autoFocus
-          />
-          <button
-            className="btn-register"
-            onClick={handleRegister}
-            disabled={!username.trim()}
-          >
-            Get Started
-          </button>
+      <div className="entrance-screen">
+        <div className="entrance-container">
+          <div className="entrance-hero">
+            <img src={nodLogo} alt="Nod" className="entrance-logo entrance-logo-float" />
+            <h1 className="entrance-title">nod</h1>
+            <p className="entrance-tagline">Communication that never breaks</p>
+          </div>
+
+          <div className="entrance-card">
+            <div className="entrance-card-header">
+              <h2>Welcome</h2>
+              <p>Choose a username to get started. Your identity stays on your device.</p>
+            </div>
+            <div className="entrance-form">
+              <div className="entrance-input-wrapper">
+                <svg className="entrance-input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <input
+                  className="entrance-input"
+                  placeholder="Your username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleRegister()}
+                  autoFocus
+                  maxLength={24}
+                />
+              </div>
+              <button
+                className="entrance-btn"
+                onClick={handleRegister}
+                disabled={!username.trim()}
+              >
+                Get Started
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                  <polyline points="12 5 19 12 12 19"/>
+                </svg>
+              </button>
+            </div>
+
+            <div className="entrance-features">
+              <div className="entrance-feature">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                <span>End-to-end encrypted</span>
+              </div>
+              <div className="entrance-feature">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                  <line x1="8" y1="21" x2="16" y2="21"/>
+                  <line x1="12" y1="17" x2="12" y2="21"/>
+                </svg>
+                <span>Works offline</span>
+              </div>
+              <div className="entrance-feature">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="2" y1="12" x2="22" y2="12"/>
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                </svg>
+                <span>Peer-to-peer</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
