@@ -1,4 +1,4 @@
-# TermTalk 💬
+# Nod 💬
 
 A terminal-based instant messenger. Find people, add contacts, and chat — all from your terminal.
 
@@ -10,23 +10,23 @@ A terminal-based instant messenger. Find people, add contacts, and chat — all 
 
 ### 1. Download
 
-Grab the latest binary for your OS from [GitHub Releases](https://github.com/T9ner/termtk/releases):
+Grab the latest binary for your OS from [GitHub Releases](https://github.com/T9ner/nod/releases):
 
 | OS | Binary |
 |----|--------|
-| Windows | `termtalk_windows_amd64.exe` |
-| macOS | `termtalk_darwin_amd64` |
-| Linux | `termtalk_linux_amd64` |
+| Windows | `nod_windows_amd64.exe` |
+| macOS | `nod_darwin_amd64` |
+| Linux | `nod_linux_amd64` |
 
 ### 2. Run
 
 ```bash
 # macOS / Linux
-chmod +x termtalk_*
-./termtalk_linux_amd64
+chmod +x nod_*
+./nod_linux_amd64
 
 # Windows
-termtalk_windows_amd64.exe
+nod_windows_amd64.exe
 ```
 
 That's it. No flags, no config files, no server setup.
@@ -36,16 +36,16 @@ That's it. No flags, no config files, no server setup.
 Pick a username. Your unique ID is generated automatically.
 
 ```
-  Welcome to TermTalk
+  Welcome to Nod
 
 > Enter your username: tunde
 ```
 
-You're now connected to the TermTalk relay and visible to other users.
+You're now connected to the Nod relay and visible to other users.
 
 ### 4. Find People
 
-Press **`Ctrl+F`** to search for other TermTalk users:
+Press **`Ctrl+F`** to search for other Nod users:
 
 ```
   Find Users on Relay
@@ -72,7 +72,7 @@ Select a contact in the sidebar, press **Tab** to switch to the chat pane, type 
 │ > chidi (2) │  │ chidi: hey!                   │
 │   alice     │  │ you: what's good?         [✓] │
 │             │  │ chidi: nm, you?               │
-│             │  │ you: building termtalk    [✓✓] │
+│             │  │ you: building nod         [✓✓] │
 │             │  │                               │
 │             │  │ > type a message...           │
 └─────────────┘  └──────────────────────────────┘
@@ -107,7 +107,7 @@ Select a contact in the sidebar, press **Tab** to switch to the chat pane, type 
 
 ## How It Works
 
-TermTalk connects to a cloud relay at `termtalk-relay.fly.dev` for user discovery and message delivery. On local networks, it also uses UDP broadcast for direct peer-to-peer connections.
+Nod connects to a cloud relay at `nod-relay.fly.dev` for user discovery and message delivery. On local networks, it also uses UDP broadcast for direct peer-to-peer connections.
 
 ```
 ┌──────────┐          ┌─────────────────────┐          ┌──────────┐
@@ -134,22 +134,22 @@ TermTalk connects to a cloud relay at `termtalk-relay.fly.dev` for user discover
 
 ```bash
 brew tap T9ner/homebrew-tap
-brew install termtalk
+brew install nod
 ```
 
 ### WinGet (Windows)
 
 ```cmd
-winget install T9ner.TermTalk
+winget install T9ner.Nod
 ```
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/T9ner/termtk.git
-cd termtk
-go build -o termtalk ./cmd/termtalk
-./termtalk
+git clone https://github.com/T9ner/nod.git
+cd nod
+go build -o nod ./cmd/nod
+./nod
 ```
 
 ---
@@ -160,10 +160,10 @@ You can run your own relay server:
 
 ```bash
 # Build and run locally
-go run ./cmd/termtalk-relay --port 55558
+go run ./cmd/nod-relay --port 55558
 
 # Connect clients to your relay
-./termtalk --relay your-server.com:55558
+./nod --relay your-server.com:55558
 ```
 
 Or deploy to Fly.io:
@@ -194,8 +194,8 @@ go fmt ./...
 
 | Component | Role |
 |-----------|------|
-| `cmd/termtalk` | Client binary — TUI, networking, local DB |
-| `cmd/termtalk-relay` | Relay server — user registry, store-and-forward, search, presence |
+| `cmd/nod` | Client binary — TUI, networking, local DB |
+| `cmd/nod-relay` | Relay server — user registry, store-and-forward, search, presence |
 | `internal/ui` | Bubble Tea terminal UI |
 | `internal/client` | Client facade — orchestrates DB, networking, events |
 | `internal/network` | TCP sync, UDP discovery, relay connection |

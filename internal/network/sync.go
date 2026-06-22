@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"termtalk/internal/crypto"
-	"termtalk/internal/db"
-	"termtalk/internal/protocol"
+	"nod/internal/crypto"
+	"nod/internal/db"
+	"nod/internal/protocol"
 )
 
 // Frame represents a protocol packet exchanged over TCP.
@@ -98,8 +98,8 @@ type SyncManager struct {
 	OnICEStatus    func(peerUUID string, direct bool)
 }
 
-// DefaultRelayAddr is the public TermTalk relay node hosted on Fly.io
-const DefaultRelayAddr = "termtalk-relay.fly.dev:55558"
+// DefaultRelayAddr is the public Nod relay node hosted on Fly.io
+const DefaultRelayAddr = "nod-relay.fly.dev:55558"
 
 // NewSyncManager creates a SyncManager instance.
 func NewSyncManager(localUUID, username string, tcpPort int, database *db.Database) *SyncManager {
@@ -267,7 +267,7 @@ func (sm *SyncManager) ConnectToPeer(ctx context.Context, c *db.Contact) error {
 }
 
 // SendMessage sends a message to a peer. If peer is online locally, it transmits via TCP. Otherwise, it fallbacks to the relay server.
-func (sm *SyncManager) SendMessage(peerUUID string, content string) error {
+func (sm *SyncManager) SendMessage(peerUUID string, content string, replyTo string) error {
 	localUUID := sm.getLocalUUID()
 	msg := &db.Message{
 		Sender:    localUUID,
@@ -275,6 +275,7 @@ func (sm *SyncManager) SendMessage(peerUUID string, content string) error {
 		Content:   content,
 		Timestamp: time.Now(),
 		Status:    string(db.StatusQueued),
+		ReplyTo:   replyTo,
 	}
 	msg.ID = msg.GenerateID()
 
@@ -315,6 +316,8 @@ func (sm *SyncManager) SendMessage(peerUUID string, content string) error {
 				recipientContact, cErr := sm.db.GetContact(peerUUID)
 				if cErr == nil && recipientContact != nil && len(recipientContact.X25519PublicKey) == 32 {
 					msg.Encrypted = true
+					// Persist the encrypted flag to DB (ON CONFLICT updates it)
+					_ = sm.db.SaveMessage(msg)
 				}
 			}
 
@@ -337,7 +340,7 @@ func (sm *SyncManager) SendMessage(peerUUID string, content string) error {
 // SyncHistory exchanges message hashes and syncs history.
 func (sm *SyncManager) SyncHistory(pc *PeerConnection) {
 	localUUID := sm.getLocalUUID()
-	history, err := sm.db.GetChatHistory(localUUID, pc.UUID)
+	history, err := sm.db.GetChatHistory(localUUID, pc.UUID, 0, 0)
 	if err != nil {
 		return
 	}
@@ -527,7 +530,7 @@ func (sm *SyncManager) handleConnection(pc *PeerConnection) {
 // handleSyncList processes the message log comparison.
 func (sm *SyncManager) handleSyncList(peerUUID string, peerHashes []string, sendFunc func(Frame)) {
 	localUUID := sm.getLocalUUID()
-	history, err := sm.db.GetChatHistory(localUUID, peerUUID)
+	history, err := sm.db.GetChatHistory(localUUID, peerUUID, 0, 0)
 	if err != nil {
 		return
 	}
@@ -571,7 +574,7 @@ func (sm *SyncManager) handleSyncList(peerUUID string, peerHashes []string, send
 // handleSyncRequest processes requests for missing messages.
 func (sm *SyncManager) handleSyncRequest(peerUUID string, requestedHashes []string, sendFunc func(Frame)) {
 	localUUID := sm.getLocalUUID()
-	history, err := sm.db.GetChatHistory(localUUID, peerUUID)
+	history, err := sm.db.GetChatHistory(localUUID, peerUUID, 0, 0)
 	if err != nil {
 		return
 	}
@@ -595,15 +598,22 @@ func (sm *SyncManager) handleIncomingMessage(peerUUID string, m *db.Message) {
 		return
 	}
 
+	// Feature F17: Drop messages from blocked contacts.
+	contact, err := sm.db.GetContact(m.Sender)
+	if err == nil && contact != nil && contact.Blocked {
+		log.Printf("sync: dropping message from blocked contact %s", m.Sender)
+		return
+	}
+
 	// If it is a delivery ACK, complete the message status sync
 	if m.Status == string(db.StatusAck) {
-		if err := sm.db.UpdateMessageStatus(m.Content, string(db.StatusSynced)); err != nil {
+		originalMsgID := m.Content // Content holds the original message's ID
+		if err := sm.db.UpdateMessageStatus(originalMsgID, string(db.StatusSynced)); err != nil {
 			log.Printf("sync: failed to update ack'd message status: %v", err)
 		}
-		m.Status = string(db.StatusSynced)
-		if sm.OnMsgRecv != nil {
-			sm.OnMsgRecv(m)
-		}
+		// Do NOT fire OnMsgRecv here — m.Content is the message ID (SHA-256 hash),
+		// not actual message text. Firing OnMsgRecv would display the hash as content.
+		// The status update in the DB is sufficient; the UI will pick it up on next load.
 		return
 	}
 
@@ -723,7 +733,7 @@ func (sm *SyncManager) relayLoop(ctx context.Context) {
 			sm.relayOnline = true
 			sm.relayMu.Unlock()
 
-			log.Printf("Successfully registered on TermTalk Relay: %s", addr)
+			log.Printf("Successfully registered on Nod Relay: %s", addr)
 
 			// Drain locally queued messages through the relay
 			go sm.drainOutbox()
@@ -951,7 +961,7 @@ func (sm *SyncManager) triggerRelaySyncAll() {
 
 	localUUID := sm.getLocalUUID()
 	for _, c := range contacts {
-		history, err := sm.db.GetChatHistory(localUUID, c.UUID)
+		history, err := sm.db.GetChatHistory(localUUID, c.UUID, 0, 0)
 		if err != nil {
 			continue
 		}

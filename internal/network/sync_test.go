@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"termtalk/internal/db"
+	"nod/internal/db"
 )
 
 func createTempDB(t *testing.T, name string) (*db.Database, func()) {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "termtalk_net_test_"+name)
+	dir, err := os.MkdirTemp("", "nod_net_test_"+name)
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestSyncManagerP2P(t *testing.T) {
 	}
 
 	// 4. Send Message from Alice to Bob
-	err = aliceSync.SendMessage(bobProfile.UUID, "Hi Bob, this is Alice!")
+	err = aliceSync.SendMessage(bobProfile.UUID, "Hi Bob, this is Alice!", "")
 	if err != nil {
 		t.Fatalf("alice failed to send message: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestSyncManagerP2P(t *testing.T) {
 	}
 
 	// Verify Bob stored the message in his DB
-	history, err := bobDB.GetChatHistory(bobProfile.UUID, aliceProfile.UUID)
+	history, err := bobDB.GetChatHistory(bobProfile.UUID, aliceProfile.UUID, 0, 0)
 	if err != nil {
 		t.Fatalf("failed to query bob chat history: %v", err)
 	}

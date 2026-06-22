@@ -59,7 +59,7 @@ func TestPeerDiscovery_StopWithoutStart(t *testing.T) {
 func TestPeerDiscovery_StartStop_Lifecycle(t *testing.T) {
 	// Start the discovery engine on the default DiscoveryPort.
 	// This may fail if the port is already in use (e.g. another test
-	// or a running TermTalk instance), so we skip rather than fail.
+	// or a running Nod instance), so we skip rather than fail.
 	pd := NewPeerDiscovery("lifecycle-uuid", "lifecycle", 7777, nil)
 
 	err := pd.Start(context.Background())

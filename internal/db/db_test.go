@@ -9,7 +9,7 @@ import (
 
 func tempDB(t *testing.T) (*Database, func()) {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "termtalk_test")
+	dir, err := os.MkdirTemp("", "nod_test")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestMessages(t *testing.T) {
 	}
 
 	// 2. Get history and check
-	history, err := database.GetChatHistory(localUUID, friendUUID)
+	history, err := database.GetChatHistory(localUUID, friendUUID, 0, 0)
 	if err != nil {
 		t.Fatalf("GetChatHistory err: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestMessages(t *testing.T) {
 	}
 
 	// 4. Verify status updated
-	history, err = database.GetChatHistory(localUUID, friendUUID)
+	history, err = database.GetChatHistory(localUUID, friendUUID, 0, 0)
 	if err != nil {
 		t.Fatalf("GetChatHistory err: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestMessages(t *testing.T) {
 		t.Fatalf("SaveMessage duplicate err: %v", err)
 	}
 
-	history, err = database.GetChatHistory(localUUID, friendUUID)
+	history, err = database.GetChatHistory(localUUID, friendUUID, 0, 0)
 	if err != nil {
 		t.Fatalf("GetChatHistory err: %v", err)
 	}

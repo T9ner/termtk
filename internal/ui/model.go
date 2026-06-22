@@ -3,9 +3,9 @@ package ui
 import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
-	"termtalk/internal/client"
-	"termtalk/internal/db"
-	"termtalk/internal/protocol"
+	"nod/internal/client"
+	"nod/internal/db"
+	"nod/internal/protocol"
 )
 
 type AppState int
@@ -39,7 +39,7 @@ type SearchResult struct {
 	Online   bool
 }
 
-// Model represents the state of the TermTalk TUI application.
+// Model represents the state of the Nod TUI application.
 type Model struct {
 	State     AppState
 	Client    *client.Client

@@ -6,17 +6,17 @@ import (
 	"testing"
 	"time"
 
-	"termtalk/internal/client"
+	"nod/internal/client"
 )
 
 // newTestClient creates a Client backed by a temp SQLite DB on an ephemeral port.
 func newTestClient(t *testing.T, port int) (*client.Client, func()) {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "termtalk_client_test")
+	dir, err := os.MkdirTemp("", "nod_client_test")
 	if err != nil {
 		t.Fatalf("temp dir: %v", err)
 	}
-	dbPath := filepath.Join(dir, "termtalk.db")
+	dbPath := filepath.Join(dir, "nod.db")
 
 	c, err := client.New(dbPath, port)
 	if err != nil {
@@ -78,11 +78,11 @@ func TestClient_SendMessage_PersistedInHistory(t *testing.T) {
 
 	bobUUID := "bob-uuid-001"
 
-	if err := c.SendMessage(bobUUID, "Hello Bob!"); err != nil {
+	if err := c.SendMessage(bobUUID, "Hello Bob!", ""); err != nil {
 		t.Fatalf("SendMessage: %v", err)
 	}
 
-	history, err := c.GetChatHistory(bobUUID)
+	history, err := c.GetChatHistory(bobUUID, 0, 0)
 	if err != nil {
 		t.Fatalf("GetChatHistory: %v", err)
 	}
@@ -153,12 +153,12 @@ func TestClient_ImportSync_MergesAndRegistersContact(t *testing.T) {
 	if err := aliceClient.AddContact("bob", bobProf.UUID); err != nil {
 		t.Fatalf("alice AddContact: %v", err)
 	}
-	if err := aliceClient.SendMessage(bobProf.UUID, "Hey Bob, sneakernet!"); err != nil {
+	if err := aliceClient.SendMessage(bobProf.UUID, "Hey Bob, sneakernet!", ""); err != nil {
 		t.Fatalf("alice SendMessage: %v", err)
 	}
 
 	// Alice exports the sync file
-	syncDir, err := os.MkdirTemp("", "termtalk_sync")
+	syncDir, err := os.MkdirTemp("", "nod_sync")
 	if err != nil {
 		t.Fatalf("temp dir: %v", err)
 	}
@@ -197,7 +197,7 @@ func TestClient_ImportSync_MergesAndRegistersContact(t *testing.T) {
 	}
 
 	// Bob can read Alice's imported message in their shared history
-	history, err := bobClient.GetChatHistory(aliceProf.UUID)
+	history, err := bobClient.GetChatHistory(aliceProf.UUID, 0, 0)
 	if err != nil {
 		t.Fatalf("GetChatHistory: %v", err)
 	}

@@ -1,0 +1,88 @@
+/* ============================================
+   NOD DESIGN SYSTEM — Global Tokens
+   ============================================
+   Font: Geist (Sans + Mono) by Vercel
+   Install: npm i geist
+   Palette: Neutral dark with mint accent
+   ============================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&family=Inter:wght@100..900&display=swap');
+
+:root {
+  /* ── Colors ── */
+  --nod-bg: #090D13;
+  --nod-surface: #111519;
+  --nod-surface-elevated: #1A1E24;
+  --nod-border: #252A30;
+  --nod-border-focus: #3A4048;
+
+  --nod-text-primary: #E8EAED;
+  --nod-text-secondary: #8B9098;
+  --nod-text-muted: #505660;
+
+  --nod-accent: #7DFFC2;
+  --nod-accent-hover: #5AE6A0;
+  --nod-accent-subtle: rgba(125, 255, 194, 0.04);
+  --nod-accent-border: rgba(125, 255, 194, 0.12);
+
+  --nod-sent-msg: #151A20;
+  --nod-received-msg: #1A1E24;
+
+  --nod-danger: #FF6B6B;
+  --nod-danger-subtle: rgba(255, 107, 107, 0.1);
+  --nod-danger-border: rgba(255, 107, 107, 0.2);
+  --nod-warning: #FFD93D;
+  --nod-online: #7DFFC2;
+  --nod-offline: #505660;
+
+  /* ── Typography ── */
+  --nod-font-display: "Geist", "Inter", sans-serif;
+  --nod-font-body: "Geist", "Inter", sans-serif;
+  --nod-font-mono: "Geist Mono", "JetBrains Mono", monospace;
+
+  /* ── Spacing ── */
+  --nod-space-xs: 4px;
+  --nod-space-sm: 8px;
+  --nod-space-md: 12px;
+  --nod-space-lg: 16px;
+  --nod-space-xl: 24px;
+  --nod-space-2xl: 32px;
+  --nod-space-3xl: 48px;
+  --nod-space-4xl: 64px;
+
+  /* ── Radii ── */
+  --nod-radius-sm: 6px;
+  --nod-radius-md: 8px;
+  --nod-radius-lg: 12px;
+  --nod-radius-pill: 999px;
+
+  /* ── Transitions ── */
+  --nod-transition: 150ms ease;
+  --nod-transition-spring: 150ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ── Layout ── */
+  --nod-sidebar-width: 260px;
+  --nod-header-height: 56px;
+  --nod-panel-padding: 24px;
+  --nod-bubble-gap: 8px;
+  --nod-max-text-width: 65ch;
+}
+
+/* ── Base Reset ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--nod-bg);
+  color: var(--nod-text-primary);
+  font-family: var(--nod-font-body);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  font-feature-settings: "kern" 1, "liga" 1;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

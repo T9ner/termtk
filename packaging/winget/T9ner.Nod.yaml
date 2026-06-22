@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.singleton.1.6.0.schema.json
+PackageIdentifier: T9ner.Nod
+PackageVersion: 0.1.0
+PackageName: Nod
+Publisher: T9ner
+PackageLocale: en-US
+License: MIT
+Moniker: Nod
+Tags:
+  - p2p
+  - messenger
+  - chat
+  - terminal
+  - bubbletea
+  - offline-first
+ShortDescription: Offline-first, decentralized terminal-based P2P messaging app.
+Description: >-
+  Nod is a cross-platform, decentralized, offline-first terminal messenger.
+  It discovers local peers automatically via UDP broadcast and synchronizes message
+  history via TCP. If offline, users can export and import JSON-based sync files (sneakernet).
+PackageUrl: https://github.com/T9ner/nod
+Installers:
+  - Architecture: x64
+    InstallerType: portable
+    InstallerUrl: https://github.com/T9ner/nod/releases/download/v0.1.0/Nod_windows_amd64.zip
+    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000 # Replace with actual SHA256 of the ZIP file
+    Commands:
+      - Nod
+ManifestType: singleton
+ManifestVersion: 1.6.0

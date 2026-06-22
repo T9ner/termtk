@@ -11,7 +11,7 @@ import (
 // tempSyncPath returns a temp file path for a sync file and a cleanup func.
 func tempSyncPath(t *testing.T) (string, func()) {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "termtalk_sneakernet_test")
+	dir, err := os.MkdirTemp("", "nod_sneakernet_test")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestSyncFile_RoundTrip(t *testing.T) {
 	}
 
 	// Bob's database now contains both messages
-	history, err := bobDB.GetChatHistory(bobUUID, aliceProfile.UUID)
+	history, err := bobDB.GetChatHistory(bobUUID, aliceProfile.UUID, 0, 0)
 	if err != nil {
 		t.Fatalf("GetChatHistory err: %v", err)
 	}

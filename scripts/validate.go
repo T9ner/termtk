@@ -33,14 +33,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("\n=== 4. Verifying Cross-Compilation (cmd/termtalk) ===")
+	fmt.Println("\n=== 4. Verifying Cross-Compilation (cmd/nod) ===")
 	// Compile for current OS
 	fmt.Printf("Compiling for local OS (%s/%s)...\n", runtime.GOOS, runtime.GOARCH)
 	buildName := "build_test_local"
 	if runtime.GOOS == "windows" {
 		buildName += ".exe"
 	}
-	if err := run("go", "build", "-o", buildName, "./cmd/termtalk"); err != nil {
+	if err := run("go", "build", "-o", buildName, "./cmd/nod"); err != nil {
 		fmt.Printf("local build failed: %v\n", err)
 		_ = os.Remove(buildName)
 		os.Exit(1)
@@ -50,7 +50,7 @@ func main() {
 	// Cross-compile for Windows (if not current OS)
 	if runtime.GOOS != "windows" {
 		fmt.Println("Cross-compiling for Windows (amd64)...")
-		cmd := exec.Command("go", "build", "-o", "build_test_win.exe", "./cmd/termtalk")
+		cmd := exec.Command("go", "build", "-o", "build_test_win.exe", "./cmd/nod")
 		cmd.Env = append(os.Environ(), "GOOS=windows", "GOARCH=amd64")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -65,7 +65,7 @@ func main() {
 	// Cross-compile for macOS (darwin amd64)
 	if runtime.GOOS != "darwin" {
 		fmt.Println("Cross-compiling for macOS (darwin/amd64)...")
-		cmd := exec.Command("go", "build", "-o", "build_test_mac", "./cmd/termtalk")
+		cmd := exec.Command("go", "build", "-o", "build_test_mac", "./cmd/nod")
 		cmd.Env = append(os.Environ(), "GOOS=darwin", "GOARCH=amd64")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -77,13 +77,13 @@ func main() {
 		_ = os.Remove("build_test_mac")
 	}
 
-	fmt.Println("\n=== 5. Verifying Cross-Compilation (cmd/termtalk-relay) ===")
+	fmt.Println("\n=== 5. Verifying Cross-Compilation (cmd/nod-relay) ===")
 	relayBuildName := "relay_test_local"
 	if runtime.GOOS == "windows" {
 		relayBuildName += ".exe"
 	}
 	fmt.Printf("Compiling relay for local OS (%s/%s)...\n", runtime.GOOS, runtime.GOARCH)
-	if err := run("go", "build", "-o", relayBuildName, "./cmd/termtalk-relay"); err != nil {
+	if err := run("go", "build", "-o", relayBuildName, "./cmd/nod-relay"); err != nil {
 		fmt.Printf("relay local build failed: %v\n", err)
 		_ = os.Remove(relayBuildName)
 		os.Exit(1)

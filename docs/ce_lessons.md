@@ -1,6 +1,6 @@
-# TermTalk Compound Engineering - Lessons & AI Memory
+# Nod Compound Engineering - Lessons & AI Memory
 
-This file serves as the institutional memory for AI agents co-developing TermTalk. It documents past bugs, architectural decisions, and performance optimizations. 
+This file serves as the institutional memory for AI agents co-developing Nod. It documents past bugs, architectural decisions, and performance optimizations. 
 
 **ALL AGENTS MUST READ THIS FILE ON STARTUP TO AVOID REGRESSIONS.**
 
@@ -61,7 +61,7 @@ When completing a debugging task or a major architectural optimization:
   3. Viewport heights didn't subtract headers and borders correctly.
   4. Sync operations performed loop-based singular writes instead of bulk database transactions.
 * **Code Change / Fix:**
-  1. Implemented client connection send lock mutexes in `cmd/termtalk-relay/main.go` and `internal/network/sync.go`.
+  1. Implemented client connection send lock mutexes in `cmd/Nod-relay/main.go` and `internal/network/sync.go`.
   2. Wrapped cleanup checks in matching condition filters (`clients[client.UUID] == client`).
   3. Fixed UI viewport resizing offsets dynamically.
   4. Wrapped import/export sneakernet writes inside transactions.
@@ -120,14 +120,14 @@ When completing a debugging task or a major architectural optimization:
 
 ### CE-006: Fly.io Deployment Without IP Allocation (Zero Connectivity)
 * **Date:** 2026-06-17
-* **Symptom:** Relay deployed successfully to Fly.io. Health checks passed. But zero clients could connect — `connected=0 registered=0` for the entire 12+ hour lifetime. Users reported TermTalk "not working" with no errors shown.
+* **Symptom:** Relay deployed successfully to Fly.io. Health checks passed. But zero clients could connect — `connected=0 registered=0` for the entire 12+ hour lifetime. Users reported Nod "not working" with no errors shown.
 * **Root Cause:** The deployment used `fly apps create` + `fly deploy` instead of `fly launch`. The `fly launch` command automatically allocates public IPs (IPv4 + IPv6), but `fly apps create` does NOT. Without public IPs, the `.fly.dev` hostname had no DNS records and no external traffic could reach the app.
 * **Code Change / Fix:**
   ```bash
   fly ips allocate-v6           # Free, dedicated
   fly ips allocate-v4 --shared  # Free, shared Anycast
   ```
-  After allocation, `termtalk-relay.fly.dev` resolved to both IPv4 (`66.241.124.156`) and IPv6 (`2a09:8280:1::12c:5455:0`), and TCP connections on port 55558 succeeded immediately.
+  After allocation, `Nod-relay.fly.dev` resolved to both IPv4 (`66.241.124.156`) and IPv6 (`2a09:8280:1::12c:5455:0`), and TCP connections on port 55558 succeeded immediately.
 * **Strict Rule to Prevent Regression:**
   * After ANY Fly.io deployment, verify `fly ips list` shows at least one public IP.
   * After ANY Fly.io deployment, verify TCP connectivity: `fly ping` or a manual TCP socket test to the app hostname and port.
@@ -137,7 +137,7 @@ When completing a debugging task or a major architectural optimization:
 
 ### CE-007: Fly.io Shared IPv4 Cannot Route Raw TCP on Custom Ports
 * **Date:** 2026-06-17
-* **Symptom:** After allocating shared IPv4 and IPv6, TCP connections to `termtalk-relay.fly.dev:55558` appeared to succeed at socket level (SYN/ACK) but the relay application never received any data. Registration always returned empty response. Relay health logs showed `connected=0` despite clients connecting.
+* **Symptom:** After allocating shared IPv4 and IPv6, TCP connections to `Nod-relay.fly.dev:55558` appeared to succeed at socket level (SYN/ACK) but the relay application never received any data. Registration always returned empty response. Relay health logs showed `connected=0` despite clients connecting.
 * **Root Cause:** Fly.io shared IPv4 uses Anycast and routes traffic by inspecting SNI (TLS) or Host headers (HTTP). Raw TCP on a non-standard port (55558) has no such headers, so the proxy accepts the TCP handshake but cannot route bytes to the correct app. The health check passed because it runs inside Fly's internal network, not through the public proxy.
 * **Code Change / Fix:**
   1. Allocated a **dedicated IPv4** (`fly ips allocate-v4`, $2/month) which routes ALL ports directly.
@@ -252,3 +252,17 @@ When completing a debugging task or a major architectural optimization:
 * **Strict Rule to Prevent Regression:**
   * When adding a Wails binding, audit the TUI's equivalent handler for ALL side effects (read receipts, shortcode conversion, typing indicators, etc.) and replicate them.
   * Maintain a binding parity checklist: every TUI feature must have a desktop binding equivalent.
+
+### CE-015: ACK Message SHA-256 Hash Displayed as Message Content
+* **Date:** 2026-06-22
+* **Symptom:** Some messages in the web UI showed a 64-character hex string (SHA-256 hash) instead of actual message text. These appeared with the 🔒 encrypted badge.
+* **Root Cause:** In `handleIncomingMessage` (sync.go), the ACK handler stored the original message ID in `m.Content` for status update purposes. After updating the DB status, it fired `OnMsgRecv(m)` — pushing a `MessageReceivedEvent` to the UI where `m.Content` was the SHA-256 hash, not the message text. The UI appended this as a new message bubble.
+* **Code Change / Fix:**
+  1. Removed `OnMsgRecv(m)` call from the ACK handler — ACKs are status-only updates, not new messages.
+  2. Updated `saveMessageTx` ON CONFLICT clause to also update the `encrypted` column.
+  3. Added `SaveMessage(msg)` call after setting `msg.Encrypted = true` in the relay send path to persist the flag.
+* **Strict Rule to Prevent Regression:**
+  * NEVER fire `OnMsgRecv` with ACK messages — their `Content` field is not message text, it's the original message ID.
+  * When using message fields for protocol-internal data (like ACK carrying the original ID in `Content`), NEVER pass that message to UI event handlers.
+  * Any new ON CONFLICT clause in `saveMessageTx` must update ALL mutable fields (status, encrypted, edited), not just status.
+

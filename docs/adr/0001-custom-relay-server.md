@@ -2,7 +2,7 @@
 
 ## Context
 
-TermTalk is designed to work out of the box on Windows and macOS, with or without a local network connection.
+Nod is designed to work out of the box on Windows and macOS, with or without a local network connection.
 However, direct peer-to-peer (P2P) communication over the public internet is blocked by default on home and mobile routers due to Network Address Translation (NAT) and firewalls.
 
 To allow users to message each other over the internet without requiring manual configuration (VPNs, Tailscale, or router port forwarding), we need a traversal mechanism.
@@ -23,7 +23,7 @@ We will implement a lightweight **Relay Server** architecture:
 
 ## Consequences
 
-*   **Zero-Configuration**: Friends only need each other's TermTalk UUID to communicate anywhere in the world.
+*   **Zero-Configuration**: Friends only need each other's Nod UUID to communicate anywhere in the world.
 *   **Compile Speed**: Keeps compile times under 2 seconds and maintains a tiny binary size.
 *   **Reliability**: Avoids complex NAT hole-punching failures; works behind cellular networks and corporate firewalls.
 *   **Trust Model**: While the relay forwards messages, all messages are hashed for integrity. (Future phases can add end-to-end encryption so the relay cannot read message payloads).

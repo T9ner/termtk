@@ -10,12 +10,12 @@ import (
 	"sync"
 	"time"
 
-	"termtalk/internal/db"
+	"nod/internal/db"
 )
 
 const (
 	DiscoveryPort     = 55555
-	DiscoveryPayload  = "termtalk:discovery:%s:%s:%d" // termtalk:discovery:UUID:USERNAME:TCP_PORT
+	DiscoveryPayload  = "nod:discovery:%s:%s:%d" // nod:discovery:UUID:USERNAME:TCP_PORT
 	BroadcastInterval = 5 * time.Second
 )
 
@@ -121,7 +121,7 @@ func (p *PeerDiscovery) listenLoop(conn net.PacketConn) {
 			}
 
 			payload := string(buf[:n])
-			if !strings.HasPrefix(payload, "termtalk:discovery:") {
+			if !strings.HasPrefix(payload, "nod:discovery:") {
 				continue
 			}
 

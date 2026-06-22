@@ -2,14 +2,18 @@ package client
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
-	"termtalk/internal/db"
-	"termtalk/internal/network"
-	"termtalk/internal/protocol"
+	"nod/internal/db"
+	"nod/internal/network"
+	"nod/internal/protocol"
 )
 
 // Event is a domain event emitted by the Client and consumed by the TUI.
@@ -66,7 +70,7 @@ type ReactionEvent struct{ Reaction *db.Reaction }
 
 func (ReactionEvent) isEvent() {}
 
-// Client is the unified coordinator for the TermTalk application.
+// Client is the unified coordinator for the Nod application.
 // It encapsulates the Database, PeerDiscovery daemon, and SyncManager
 // behind a single, testable interface so the TUI never touches
 // infrastructure directly.
@@ -193,6 +197,32 @@ func (c *Client) Register(username string) (*db.Profile, error) {
 	return p, nil
 }
 
+// ChangeUsername validates and updates the user's display name, persists it
+// to the database, refreshes the in-memory profile cache, and pushes the
+// new credentials to the networking layer.
+func (c *Client) ChangeUsername(newUsername string) error {
+	if newUsername == "" {
+		return fmt.Errorf("client: username must not be empty")
+	}
+	if len(newUsername) > 32 {
+		return fmt.Errorf("client: username must be 32 characters or fewer")
+	}
+
+	if err := c.db.UpdateUsername(newUsername); err != nil {
+		return fmt.Errorf("client: failed to update username: %w", err)
+	}
+
+	c.mu.Lock()
+	c.profile.Username = newUsername
+	p := c.profile
+	c.mu.Unlock()
+
+	c.syncMgr.UpdateCredentials(p.UUID, newUsername, p.PublicKey, p.PrivateKey, p.X25519PublicKey)
+	c.discovery.UpdateCredentials(p.UUID, newUsername)
+
+	return nil
+}
+
 // Start starts the network daemons using the already-loaded profile credentials.
 // Call this on subsequent boots (profile already exists in DB).
 func (c *Client) Start(ctx context.Context) error {
@@ -247,6 +277,11 @@ func (c *Client) ListContacts() ([]db.Contact, error) {
 	return c.db.ListContacts()
 }
 
+// GetContact returns a single contact by UUID.
+func (c *Client) GetContact(uuid string) (*db.Contact, error) {
+	return c.db.GetContact(uuid)
+}
+
 // AddContact manually registers a Contact (for offline / sneakernet peers).
 func (c *Client) AddContact(username, uuid string) error {
 	if username == "" || uuid == "" {
@@ -272,13 +307,19 @@ func (c *Client) DeleteContact(uuid string) error {
 
 // SendMessage sends a Message to peerUUID. The message is saved locally with
 // status "queued"; if the Peer is online it is delivered over TCP immediately.
-func (c *Client) SendMessage(peerUUID, content string) error {
-	return c.syncMgr.SendMessage(peerUUID, content)
+func (c *Client) SendMessage(peerUUID, content string, replyTo string) error {
+	return c.syncMgr.SendMessage(peerUUID, content, replyTo)
 }
 
-// GetChatHistory returns all Messages exchanged between the local Peer and
+// GetMessage retrieves a single message by its ID.
+func (c *Client) GetMessage(id string) (*db.Message, error) {
+	return c.db.GetMessage(id)
+}
+
+// GetChatHistory returns Messages exchanged between the local Peer and
 // the Contact identified by contactUUID, ordered by timestamp ascending.
-func (c *Client) GetChatHistory(contactUUID string) ([]db.Message, error) {
+// Supports pagination via limit and offset. Pass 0, 0 for defaults.
+func (c *Client) GetChatHistory(contactUUID string, limit, offset int) ([]db.Message, error) {
 	c.mu.RLock()
 	p := c.profile
 	c.mu.RUnlock()
@@ -286,7 +327,7 @@ func (c *Client) GetChatHistory(contactUUID string) ([]db.Message, error) {
 	if p == nil {
 		return nil, fmt.Errorf("client: no local profile loaded")
 	}
-	return c.db.GetChatHistory(p.UUID, contactUUID)
+	return c.db.GetChatHistory(p.UUID, contactUUID, limit, offset)
 }
 
 // ExportSync writes an Outbox sync file for the given contact to exportPath.
@@ -390,6 +431,11 @@ func (c *Client) DeleteMessagesForEveryone(contactUUID string, messageIDs []stri
 	return c.db.DeleteMessages(messageIDs)
 }
 
+// EditMessageContent updates a message's content and marks it as edited.
+func (c *Client) EditMessageContent(id string, newContent string) error {
+	return c.db.UpdateMessageContent(id, newContent)
+}
+
 // SendReaction sends (or toggles off) an emoji reaction on a message.
 func (c *Client) SendReaction(recipientUUID, messageID, emoji string) error {
 	c.mu.RLock()
@@ -491,4 +537,140 @@ func (c *Client) SetNotificationsEnabled(enabled bool) error {
 		val = "true"
 	}
 	return c.db.SetSetting("notifications_enabled", val)
+}
+
+// BlockContact sets the blocked flag for a contact.
+func (c *Client) BlockContact(uuid string) error {
+	return c.db.BlockContact(uuid)
+}
+
+// UnblockContact clears the blocked flag for a contact.
+func (c *Client) UnblockContact(uuid string) error {
+	return c.db.UnblockContact(uuid)
+}
+
+// PinContact sets the pinned flag for a contact.
+func (c *Client) PinContact(uuid string) error {
+	return c.db.PinContact(uuid)
+}
+
+// UnpinContact clears the pinned flag for a contact.
+func (c *Client) UnpinContact(uuid string) error {
+	return c.db.UnpinContact(uuid)
+}
+
+// ArchiveContact sets the archived flag for a contact.
+func (c *Client) ArchiveContact(uuid string) error {
+	return c.db.ArchiveContact(uuid)
+}
+
+// UnarchiveContact clears the archived flag for a contact.
+func (c *Client) UnarchiveContact(uuid string) error {
+	return c.db.UnarchiveContact(uuid)
+}
+
+// ── File Attachment Methods (F11/F12: File & Image Sharing) ──
+
+// UploadsDir returns the path to the uploads directory, creating it if needed.
+func (c *Client) UploadsDir() (string, error) {
+	dir := filepath.Join(filepath.Dir(c.db.Path()), "uploads")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+// SaveUpload stores file data to disk and returns an Attachment with content-addressed ID.
+func (c *Client) SaveUpload(filename string, data []byte) (*db.Attachment, error) {
+	dir, err := c.UploadsDir()
+	if err != nil {
+		return nil, err
+	}
+
+	// Content-addressed ID
+	hash := sha256.Sum256(data)
+	id := fmt.Sprintf("%x", hash)
+
+	// Determine extension from filename
+	ext := filepath.Ext(filename)
+	storedName := id + ext
+
+	// Write file
+	path := filepath.Join(dir, storedName)
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return nil, err
+	}
+
+	// Detect MIME type from extension
+	mimeType := "application/octet-stream"
+	switch strings.ToLower(ext) {
+	case ".jpg", ".jpeg":
+		mimeType = "image/jpeg"
+	case ".png":
+		mimeType = "image/png"
+	case ".gif":
+		mimeType = "image/gif"
+	case ".webp":
+		mimeType = "image/webp"
+	case ".svg":
+		mimeType = "image/svg+xml"
+	case ".pdf":
+		mimeType = "application/pdf"
+	case ".txt":
+		mimeType = "text/plain"
+	case ".mp3":
+		mimeType = "audio/mpeg"
+	case ".mp4":
+		mimeType = "video/mp4"
+	case ".zip":
+		mimeType = "application/zip"
+	}
+
+	att := &db.Attachment{
+		ID:       id,
+		Filename: filename,
+		MIMEType: mimeType,
+		Size:     int64(len(data)),
+	}
+	return att, nil
+}
+
+// GetUploadPath resolves the on-disk path for an attachment by its content-addressed ID.
+func (c *Client) GetUploadPath(attachmentID string) (string, error) {
+	dir, err := c.UploadsDir()
+	if err != nil {
+		return "", err
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", err
+	}
+	for _, e := range entries {
+		name := e.Name()
+		nameNoExt := strings.TrimSuffix(name, filepath.Ext(name))
+		if nameNoExt == attachmentID {
+			return filepath.Join(dir, name), nil
+		}
+	}
+	return "", fmt.Errorf("attachment not found: %s", attachmentID)
+}
+
+// SaveAttachment delegates to the database.
+func (c *Client) SaveAttachment(a *db.Attachment) error {
+	return c.db.SaveAttachment(a)
+}
+
+// GetAttachmentsByMsgID delegates to the database.
+func (c *Client) GetAttachmentsByMsgID(msgID string) ([]db.Attachment, error) {
+	return c.db.GetAttachmentsByMsgID(msgID)
+}
+
+// GetAttachmentsForMessages delegates to the database.
+func (c *Client) GetAttachmentsForMessages(msgIDs []string) (map[string][]db.Attachment, error) {
+	return c.db.GetAttachmentsForMessages(msgIDs)
+}
+
+// SearchMessages searches all messages by content.
+func (c *Client) SearchMessages(query string, limit int) ([]db.Message, error) {
+	return c.db.SearchMessages(query, limit)
 }

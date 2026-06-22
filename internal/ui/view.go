@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
-	"termtalk/internal/db"
+	"nod/internal/db"
 )
 
 var (
@@ -171,9 +171,9 @@ func (m Model) View() string {
 func (m Model) viewRegister() string {
 	var sb strings.Builder
 	sb.WriteString("\n")
-	sb.WriteString(titleStyle.Render(" Welcome to TermTalk "))
+	sb.WriteString(titleStyle.Render(" Welcome to Nod "))
 	sb.WriteString("\n\n")
-	sb.WriteString("TermTalk is a cross-platform, decentralized, offline-first messenger.\n")
+	sb.WriteString("Nod is a cross-platform, decentralized, offline-first messenger.\n")
 	sb.WriteString("To begin, please choose a username. Your unique UUID will be auto-generated.\n\n")
 	sb.WriteString(m.UsernameInput.View())
 	sb.WriteString("\n\n(Press Enter to confirm and launch)")
@@ -183,7 +183,7 @@ func (m Model) viewRegister() string {
 func (m Model) viewProfile() string {
 	var sb strings.Builder
 	sb.WriteString("\n")
-	sb.WriteString(titleStyle.Render(" Your TermTalk Profile "))
+	sb.WriteString(titleStyle.Render(" Your Nod Profile "))
 	sb.WriteString("\n\n")
 
 	if m.LocalUser != nil {
@@ -202,7 +202,7 @@ func (m Model) viewProfile() string {
 		shareID := fmt.Sprintf("%s:%s", m.LocalUser.Username, m.LocalUser.UUID)
 
 		sb.WriteString(profileStyle.Render("╔"+border+"╗") + "\n")
-		sb.WriteString(profileStyle.Render("║") + centerPad("Your TermTalk Profile", boxWidth-2) + profileStyle.Render("║") + "\n")
+		sb.WriteString(profileStyle.Render("║") + centerPad("Your Nod Profile", boxWidth-2) + profileStyle.Render("║") + "\n")
 		sb.WriteString(profileStyle.Render("╠"+divider+"╣") + "\n")
 		sb.WriteString(profileStyle.Render("║") + padRight("", boxWidth-2) + profileStyle.Render("║") + "\n")
 		sb.WriteString(profileStyle.Render("║") + padRight(fmt.Sprintf("  Handle:    %s", handle), boxWidth-2) + profileStyle.Render("║") + "\n")
@@ -216,8 +216,8 @@ func (m Model) viewProfile() string {
 		sb.WriteString(profileStyle.Render("║") + padRight("  Share ID (give this to peers):", boxWidth-2) + profileStyle.Render("║") + "\n")
 		sb.WriteString(profileStyle.Render("║") + "  " + accentTextStyle.Render(shareID) + padRight("", boxWidth-2-2-len(shareID)) + profileStyle.Render("║") + "\n")
 		sb.WriteString(profileStyle.Render("║") + padRight("", boxWidth-2) + profileStyle.Render("║") + "\n")
-		findMeLine := fmt.Sprintf("  Find me on TermTalk: %s", handle)
-		sb.WriteString(profileStyle.Render("║") + "  " + accentTextStyle.Render(fmt.Sprintf("Find me on TermTalk: %s", handle)) + padRight("", boxWidth-2-2-len(findMeLine)+2) + profileStyle.Render("║") + "\n")
+		findMeLine := fmt.Sprintf("  Find me on Nod: %s", handle)
+		sb.WriteString(profileStyle.Render("║") + "  " + accentTextStyle.Render(fmt.Sprintf("Find me on Nod: %s", handle)) + padRight("", boxWidth-2-2-len(findMeLine)+2) + profileStyle.Render("║") + "\n")
 		sb.WriteString(profileStyle.Render("║") + padRight("", boxWidth-2) + profileStyle.Render("║") + "\n")
 		sb.WriteString(profileStyle.Render("╚"+border+"╝") + "\n")
 	} else {
@@ -254,11 +254,11 @@ func (m Model) viewDashboard() string {
 	var headerStr string
 	var identityBar string
 	if m.LocalUser != nil {
-		headerStr = titleStyle.Render(fmt.Sprintf(" TermTalk | User: %s ", m.LocalUser.Username))
+		headerStr = titleStyle.Render(fmt.Sprintf(" Nod | User: %s ", m.LocalUser.Username))
 		handle := fmt.Sprintf("@%s", m.LocalUser.Username)
 		identityBar = idBarStyle.Render(fmt.Sprintf("%s  |  Ctrl+P: Profile  |  Ctrl+F: Find Users", handle))
 	} else {
-		headerStr = titleStyle.Render(" TermTalk ")
+		headerStr = titleStyle.Render(" Nod ")
 	}
 
 	// 2. Sidebar (Contacts list)
@@ -424,7 +424,7 @@ func (m Model) viewDashboard() string {
 		chatBuilder.WriteString("\n")
 		chatBuilder.WriteString(welcomeStyle.Render("  ┌─────────────────────────────────┐") + "\n")
 		chatBuilder.WriteString(welcomeStyle.Render("  │                                 │") + "\n")
-		chatBuilder.WriteString(welcomeStyle.Render("  │   ") + accentText.Render("👋 Welcome to TermTalk!") + welcomeStyle.Render("      │") + "\n")
+		chatBuilder.WriteString(welcomeStyle.Render("  │   ") + accentText.Render("👋 Welcome to Nod!") + welcomeStyle.Render("      │") + "\n")
 		chatBuilder.WriteString(welcomeStyle.Render("  │                                 │") + "\n")
 		chatBuilder.WriteString(welcomeStyle.Render("  │   Get started:                  │") + "\n")
 		chatBuilder.WriteString(welcomeStyle.Render("  │   ") + grayText.Render("• Ctrl+A to add a peer") + welcomeStyle.Render("    │") + "\n")
@@ -579,7 +579,7 @@ func (m Model) viewSearch() string {
 func (m Model) viewHelp() string {
 	var sb strings.Builder
 	sb.WriteString("\n")
-	sb.WriteString(titleStyle.Render(" TermTalk Help "))
+	sb.WriteString(titleStyle.Render(" Nod Help "))
 	sb.WriteString("\n\n")
 
 	sectionStyle := lipgloss.NewStyle().Foreground(accentColor).Bold(true)
@@ -600,7 +600,7 @@ func (m Model) viewHelp() string {
 	writeKey("Tab", "Switch sidebar ↔ chat")
 	writeKey("↑ ↓", "Navigate contacts / scroll")
 	writeKey("Enter", "Open chat / send message")
-	writeKey("Esc", "Quit TermTalk")
+	writeKey("Esc", "Quit Nod")
 	sb.WriteString("\n")
 
 	writeSection("Actions")

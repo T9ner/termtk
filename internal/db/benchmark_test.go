@@ -10,7 +10,7 @@ import (
 
 func BenchmarkGetChatHistory(b *testing.B) {
 	// Setup db
-	dir, err := os.MkdirTemp("", "termtalk_bench")
+	dir, err := os.MkdirTemp("", "nod_bench")
 	if err != nil {
 		b.Fatalf("failed to create temp dir: %v", err)
 	}
@@ -56,7 +56,7 @@ func BenchmarkGetChatHistory(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		history, err := database.GetChatHistory(localUUID, targetUUID)
+		history, err := database.GetChatHistory(localUUID, targetUUID, 0, 0)
 		if err != nil {
 			b.Fatalf("failed to get chat history: %v", err)
 		}

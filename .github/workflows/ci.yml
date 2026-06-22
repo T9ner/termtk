@@ -26,8 +26,8 @@ jobs:
 
       - name: Build binaries
         run: |
-          go build ./cmd/termtalk
-          go build ./cmd/termtalk-relay
+          go build ./cmd/Nod
+          go build ./cmd/Nod-relay
 
   validate-goreleaser:
     runs-on: ubuntu-latest
@@ -54,4 +54,4 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Validate WinGet manifest
-        run: winget validate ./packaging/winget/T9ner.TermTalk.yaml
+        run: winget validate ./packaging/winget/T9ner.Nod.yaml

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"termtalk/internal/crypto"
+	"nod/internal/crypto"
 
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
@@ -16,7 +16,8 @@ import (
 
 // Database wraps the SQLite database connection.
 type Database struct {
-	conn *sql.DB
+	conn   *sql.DB
+	dbPath string
 }
 
 // NewDatabase initializes a new database connection and sets up tables if needed.
@@ -48,7 +49,7 @@ func NewDatabase(dbPath string) (*Database, error) {
 	// Prevent SQLITE_BUSY deadlocks by serializing connection access in Go
 	db.SetMaxOpenConns(1)
 
-	d := &Database{conn: db}
+	d := &Database{conn: db, dbPath: dbPath}
 	if err := d.migrate(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("database migration failed: %w", err)
@@ -60,6 +61,11 @@ func NewDatabase(dbPath string) (*Database, error) {
 // Close closes the database connection.
 func (d *Database) Close() error {
 	return d.conn.Close()
+}
+
+// Path returns the filesystem path to the SQLite database file.
+func (d *Database) Path() string {
+	return d.dbPath
 }
 
 // migrate creates the necessary tables and indexes.
@@ -125,6 +131,26 @@ func (d *Database) migrate() error {
 	if err := d.addColumnIfNotExists("messages", "encrypted", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		return err
 	}
+	// Add edited flag to messages table (Feature F1: Edit Messages).
+	if err := d.addColumnIfNotExists("messages", "edited", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	// Add reply_to column to messages table (Feature F2: Reply to Messages).
+	if err := d.addColumnIfNotExists("messages", "reply_to", "TEXT"); err != nil {
+		return err
+	}
+	// Add blocked flag to contacts table (Feature F17: Block User).
+	if err := d.addColumnIfNotExists("contacts", "blocked", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	// Add pinned flag to contacts table (Feature F19: Pin Conversations).
+	if err := d.addColumnIfNotExists("contacts", "pinned", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	// Add archived flag to contacts table (Feature F20: Archive Conversations).
+	if err := d.addColumnIfNotExists("contacts", "archived", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
 
 	// Reactions table (v0.5.0)
 	_, err := d.conn.Exec(`CREATE TABLE IF NOT EXISTS reactions (
@@ -134,6 +160,19 @@ func (d *Database) migrate() error {
 		emoji TEXT NOT NULL,
 		timestamp TEXT NOT NULL,
 		UNIQUE(message_id, sender_uuid, emoji)
+	)`)
+	if err != nil {
+		return err
+	}
+
+	// Attachments table (F11/F12: File & Image Sharing)
+	_, err = d.conn.Exec(`CREATE TABLE IF NOT EXISTS attachments (
+		id TEXT PRIMARY KEY,
+		filename TEXT NOT NULL,
+		mime_type TEXT NOT NULL,
+		size INTEGER NOT NULL,
+		msg_id TEXT NOT NULL,
+		FOREIGN KEY (msg_id) REFERENCES messages(id)
 	)`)
 	if err != nil {
 		return err
@@ -189,6 +228,12 @@ func (d *Database) SaveProfile(p *Profile) error {
 	return err
 }
 
+// UpdateUsername updates the username in the profile table.
+func (d *Database) UpdateUsername(newUsername string) error {
+	_, err := d.conn.Exec("UPDATE profile SET username = ?", newUsername)
+	return err
+}
+
 // upsertContactTx inserts or updates a peer's details in the contacts table inside a transaction.
 func (d *Database) upsertContactTx(tx *sql.Tx, c *Contact) error {
 	var verified int
@@ -228,9 +273,9 @@ func (d *Database) UpsertContact(c *Contact) error {
 func (d *Database) GetContact(uuid string) (*Contact, error) {
 	var c Contact
 	var pubKey, x25519PubKey []byte
-	var verified int
-	err := d.conn.QueryRow("SELECT uuid, username, ip, port, last_seen, public_key, verified, x25519_public_key FROM contacts WHERE uuid = ?", uuid).
-		Scan(&c.UUID, &c.Username, &c.IP, &c.Port, &c.LastSeen, &pubKey, &verified, &x25519PubKey)
+	var verified, blocked, pinned, archived int
+	err := d.conn.QueryRow("SELECT uuid, username, ip, port, last_seen, public_key, verified, x25519_public_key, blocked, pinned, archived FROM contacts WHERE uuid = ?", uuid).
+		Scan(&c.UUID, &c.Username, &c.IP, &c.Port, &c.LastSeen, &pubKey, &verified, &x25519PubKey, &blocked, &pinned, &archived)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -240,12 +285,15 @@ func (d *Database) GetContact(uuid string) (*Contact, error) {
 	c.PublicKey = []byte(pubKey)
 	c.Verified = verified != 0
 	c.X25519PublicKey = []byte(x25519PubKey)
+	c.Blocked = blocked != 0
+	c.Pinned = pinned != 0
+	c.Archived = archived != 0
 	return &c, nil
 }
 
 // ListContacts retrieves all stored contacts.
 func (d *Database) ListContacts() ([]Contact, error) {
-	rows, err := d.conn.Query("SELECT uuid, username, ip, port, last_seen, public_key, verified, x25519_public_key FROM contacts ORDER BY username ASC")
+	rows, err := d.conn.Query("SELECT uuid, username, ip, port, last_seen, public_key, verified, x25519_public_key, blocked, pinned, archived FROM contacts ORDER BY username ASC")
 	if err != nil {
 		return nil, err
 	}
@@ -255,16 +303,55 @@ func (d *Database) ListContacts() ([]Contact, error) {
 	for rows.Next() {
 		var c Contact
 		var pubKey, x25519PubKey []byte
-		var verified int
-		if err := rows.Scan(&c.UUID, &c.Username, &c.IP, &c.Port, &c.LastSeen, &pubKey, &verified, &x25519PubKey); err != nil {
+		var verified, blocked, pinned, archived int
+		if err := rows.Scan(&c.UUID, &c.Username, &c.IP, &c.Port, &c.LastSeen, &pubKey, &verified, &x25519PubKey, &blocked, &pinned, &archived); err != nil {
 			return nil, err
 		}
 		c.PublicKey = []byte(pubKey)
 		c.Verified = verified != 0
 		c.X25519PublicKey = []byte(x25519PubKey)
+		c.Blocked = blocked != 0
+		c.Pinned = pinned != 0
+		c.Archived = archived != 0
 		contacts = append(contacts, c)
 	}
 	return contacts, nil
+}
+
+// BlockContact sets the blocked flag for a contact.
+func (d *Database) BlockContact(uuid string) error {
+	_, err := d.conn.Exec("UPDATE contacts SET blocked = 1 WHERE uuid = ?", uuid)
+	return err
+}
+
+// UnblockContact clears the blocked flag for a contact.
+func (d *Database) UnblockContact(uuid string) error {
+	_, err := d.conn.Exec("UPDATE contacts SET blocked = 0 WHERE uuid = ?", uuid)
+	return err
+}
+
+// PinContact sets the pinned flag for a contact.
+func (d *Database) PinContact(uuid string) error {
+	_, err := d.conn.Exec("UPDATE contacts SET pinned = 1 WHERE uuid = ?", uuid)
+	return err
+}
+
+// UnpinContact clears the pinned flag for a contact.
+func (d *Database) UnpinContact(uuid string) error {
+	_, err := d.conn.Exec("UPDATE contacts SET pinned = 0 WHERE uuid = ?", uuid)
+	return err
+}
+
+// ArchiveContact sets the archived flag for a contact.
+func (d *Database) ArchiveContact(uuid string) error {
+	_, err := d.conn.Exec("UPDATE contacts SET archived = 1 WHERE uuid = ?", uuid)
+	return err
+}
+
+// UnarchiveContact clears the archived flag for a contact.
+func (d *Database) UnarchiveContact(uuid string) error {
+	_, err := d.conn.Exec("UPDATE contacts SET archived = 0 WHERE uuid = ?", uuid)
+	return err
 }
 
 // DeleteContact removes a contact by UUID. Message history is preserved.
@@ -282,11 +369,15 @@ func (d *Database) saveMessageTx(tx *sql.Tx, m *Message) error {
 	if m.Encrypted {
 		encrypted = 1
 	}
+	var edited int
+	if m.Edited {
+		edited = 1
+	}
 	_, err := tx.Exec(
-		`INSERT INTO messages (id, sender_uuid, recipient_uuid, content, timestamp, status, encrypted) 
-		 VALUES (?, ?, ?, ?, ?, ?, ?) 
-		 ON CONFLICT(id) DO UPDATE SET status = excluded.status`,
-		m.ID, m.Sender, m.Recipient, m.Content, m.Timestamp, m.Status, encrypted,
+		`INSERT INTO messages (id, sender_uuid, recipient_uuid, content, timestamp, status, encrypted, edited, reply_to) 
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) 
+		 ON CONFLICT(id) DO UPDATE SET status = excluded.status, encrypted = excluded.encrypted, edited = excluded.edited, reply_to = excluded.reply_to`,
+		m.ID, m.Sender, m.Recipient, m.Content, m.Timestamp, m.Status, encrypted, edited, m.ReplyTo,
 	)
 	return err
 }
@@ -310,21 +401,32 @@ func (d *Database) UpdateMessageStatus(id string, status string) error {
 	return err
 }
 
-// GetChatHistory fetches all messages between the local user and a contact, ordered by time.
-func (d *Database) GetChatHistory(localUUID, contactUUID string) ([]Message, error) {
+// UpdateMessageContent updates the content of a message and marks it as edited.
+func (d *Database) UpdateMessageContent(id string, newContent string) error {
+	_, err := d.conn.Exec("UPDATE messages SET content = ?, edited = 1 WHERE id = ?", newContent, id)
+	return err
+}
+
+// GetChatHistory fetches messages between the local user and a contact, ordered by time.
+// It supports pagination via limit and offset. If limit <= 0, it defaults to 50.
+func (d *Database) GetChatHistory(localUUID, contactUUID string, limit, offset int) ([]Message, error) {
+	if limit <= 0 {
+		limit = 50
+	}
 	rows, err := d.conn.Query(
-		`SELECT id, sender_uuid, recipient_uuid, content, timestamp, status, encrypted 
+		`SELECT id, sender_uuid, recipient_uuid, content, timestamp, status, encrypted, edited, reply_to 
 		 FROM (
-			 SELECT id, sender_uuid, recipient_uuid, content, timestamp, status, encrypted 
+			 SELECT id, sender_uuid, recipient_uuid, content, timestamp, status, encrypted, edited, reply_to 
 			 FROM messages 
 			 WHERE sender_uuid = ? AND recipient_uuid = ?
 			 UNION ALL
-			 SELECT id, sender_uuid, recipient_uuid, content, timestamp, status, encrypted 
+			 SELECT id, sender_uuid, recipient_uuid, content, timestamp, status, encrypted, edited, reply_to 
 			 FROM messages 
 			 WHERE sender_uuid = ? AND recipient_uuid = ?
 		 )
-		 ORDER BY timestamp ASC`,
-		localUUID, contactUUID, contactUUID, localUUID,
+		 ORDER BY timestamp ASC
+		 LIMIT ? OFFSET ?`,
+		localUUID, contactUUID, contactUUID, localUUID, limit, offset,
 	)
 	if err != nil {
 		return nil, err
@@ -335,12 +437,17 @@ func (d *Database) GetChatHistory(localUUID, contactUUID string) ([]Message, err
 	for rows.Next() {
 		var m Message
 		var ts time.Time
-		var encrypted int
-		if err := rows.Scan(&m.ID, &m.Sender, &m.Recipient, &m.Content, &ts, &m.Status, &encrypted); err != nil {
+		var encrypted, edited int
+		var replyTo sql.NullString
+		if err := rows.Scan(&m.ID, &m.Sender, &m.Recipient, &m.Content, &ts, &m.Status, &encrypted, &edited, &replyTo); err != nil {
 			return nil, err
 		}
 		m.Timestamp = ts
 		m.Encrypted = encrypted != 0
+		m.Edited = edited != 0
+		if replyTo.Valid {
+			m.ReplyTo = replyTo.String
+		}
 		history = append(history, m)
 	}
 	return history, nil
@@ -349,7 +456,7 @@ func (d *Database) GetChatHistory(localUUID, contactUUID string) ([]Message, err
 // GetUnsyncedMessages retrieves all messages to/from a peer that are not yet marked as 'synced'.
 func (d *Database) GetUnsyncedMessages(contactUUID string) ([]Message, error) {
 	rows, err := d.conn.Query(
-		`SELECT id, sender_uuid, recipient_uuid, content, timestamp, status, encrypted 
+		`SELECT id, sender_uuid, recipient_uuid, content, timestamp, status, encrypted, edited, reply_to 
 		 FROM messages 
 		 WHERE (sender_uuid = ? OR recipient_uuid = ?) AND status != 'synced'
 		 ORDER BY timestamp ASC`,
@@ -364,12 +471,17 @@ func (d *Database) GetUnsyncedMessages(contactUUID string) ([]Message, error) {
 	for rows.Next() {
 		var m Message
 		var ts time.Time
-		var encrypted int
-		if err := rows.Scan(&m.ID, &m.Sender, &m.Recipient, &m.Content, &ts, &m.Status, &encrypted); err != nil {
+		var encrypted, edited int
+		var replyTo sql.NullString
+		if err := rows.Scan(&m.ID, &m.Sender, &m.Recipient, &m.Content, &ts, &m.Status, &encrypted, &edited, &replyTo); err != nil {
 			return nil, err
 		}
 		m.Timestamp = ts
 		m.Encrypted = encrypted != 0
+		m.Edited = edited != 0
+		if replyTo.Valid {
+			m.ReplyTo = replyTo.String
+		}
 		unsynced = append(unsynced, m)
 	}
 	return unsynced, nil
@@ -379,7 +491,7 @@ func (d *Database) GetUnsyncedMessages(contactUUID string) ([]Message, error) {
 // are still in 'queued' status, for relay outbox drain on reconnect.
 func (d *Database) GetQueuedMessages(senderUUID string) ([]Message, error) {
 	rows, err := d.conn.Query(
-		`SELECT id, sender_uuid, recipient_uuid, content, timestamp, status, encrypted 
+		`SELECT id, sender_uuid, recipient_uuid, content, timestamp, status, encrypted, edited, reply_to 
 		 FROM messages 
 		 WHERE sender_uuid = ? AND status = 'queued'
 		 ORDER BY timestamp ASC`,
@@ -394,15 +506,45 @@ func (d *Database) GetQueuedMessages(senderUUID string) ([]Message, error) {
 	for rows.Next() {
 		var m Message
 		var ts time.Time
-		var encrypted int
-		if err := rows.Scan(&m.ID, &m.Sender, &m.Recipient, &m.Content, &ts, &m.Status, &encrypted); err != nil {
+		var encrypted, edited int
+		var replyTo sql.NullString
+		if err := rows.Scan(&m.ID, &m.Sender, &m.Recipient, &m.Content, &ts, &m.Status, &encrypted, &edited, &replyTo); err != nil {
 			return nil, err
 		}
 		m.Timestamp = ts
 		m.Encrypted = encrypted != 0
+		m.Edited = edited != 0
+		if replyTo.Valid {
+			m.ReplyTo = replyTo.String
+		}
 		queued = append(queued, m)
 	}
 	return queued, nil
+}
+
+// GetMessage retrieves a single message by its ID.
+func (d *Database) GetMessage(id string) (*Message, error) {
+	var m Message
+	var ts time.Time
+	var encrypted, edited int
+	var replyTo sql.NullString
+	err := d.conn.QueryRow(
+		`SELECT id, sender_uuid, recipient_uuid, content, timestamp, status, encrypted, edited, reply_to
+		 FROM messages WHERE id = ?`, id,
+	).Scan(&m.ID, &m.Sender, &m.Recipient, &m.Content, &ts, &m.Status, &encrypted, &edited, &replyTo)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	m.Timestamp = ts
+	m.Encrypted = encrypted != 0
+	m.Edited = edited != 0
+	if replyTo.Valid {
+		m.ReplyTo = replyTo.String
+	}
+	return &m, nil
 }
 
 // GetUnreadCount returns the number of messages from contactUUID to localUUID
@@ -547,4 +689,86 @@ func (d *Database) SetSetting(key, value string) error {
 		key, value,
 	)
 	return err
+}
+
+// ── Attachment Methods (F11/F12: File & Image Sharing) ──
+
+// SaveAttachment stores an attachment record in the database.
+func (d *Database) SaveAttachment(a *Attachment) error {
+	_, err := d.conn.Exec(
+		`INSERT OR IGNORE INTO attachments (id, filename, mime_type, size, msg_id) VALUES (?, ?, ?, ?, ?)`,
+		a.ID, a.Filename, a.MIMEType, a.Size, a.MsgID,
+	)
+	return err
+}
+
+// GetAttachmentsByMsgID returns all attachments for a specific message.
+func (d *Database) GetAttachmentsByMsgID(msgID string) ([]Attachment, error) {
+	rows, err := d.conn.Query(
+		`SELECT id, filename, mime_type, size, msg_id FROM attachments WHERE msg_id = ?`,
+		msgID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var atts []Attachment
+	for rows.Next() {
+		var a Attachment
+		if err := rows.Scan(&a.ID, &a.Filename, &a.MIMEType, &a.Size, &a.MsgID); err != nil {
+			return nil, err
+		}
+		atts = append(atts, a)
+	}
+	return atts, nil
+}
+
+// GetAttachmentsForMessages returns a map of message ID to attachments for a batch of message IDs.
+func (d *Database) GetAttachmentsForMessages(msgIDs []string) (map[string][]Attachment, error) {
+	result := make(map[string][]Attachment)
+	for _, id := range msgIDs {
+		atts, err := d.GetAttachmentsByMsgID(id)
+		if err != nil {
+			return nil, err
+		}
+		if len(atts) > 0 {
+			result[id] = atts
+		}
+	}
+	return result, nil
+}
+
+// SearchMessages searches all messages by content using a case-insensitive LIKE query.
+func (d *Database) SearchMessages(query string, limit int) ([]Message, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := d.conn.Query(
+		`SELECT id, sender_uuid, recipient_uuid, content, timestamp, status, encrypted, edited, reply_to
+		 FROM messages WHERE content LIKE '%' || ? || '%' ORDER BY timestamp DESC LIMIT ?`,
+		query, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []Message
+	for rows.Next() {
+		var m Message
+		var ts time.Time
+		var encrypted, edited int
+		var replyTo sql.NullString
+		if err := rows.Scan(&m.ID, &m.Sender, &m.Recipient, &m.Content, &ts, &m.Status, &encrypted, &edited, &replyTo); err != nil {
+			return nil, err
+		}
+		m.Timestamp = ts
+		m.Encrypted = encrypted != 0
+		m.Edited = edited != 0
+		if replyTo.Valid {
+			m.ReplyTo = replyTo.String
+		}
+		results = append(results, m)
+	}
+	return results, nil
 }

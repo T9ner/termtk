@@ -3,7 +3,7 @@ package protocol
 import "encoding/json"
 
 // RelayFrame represents the message wrapper used by the relay server.
-// Both the relay server (cmd/termtalk-relay) and the client sync manager
+// Both the relay server (cmd/nod-relay) and the client sync manager
 // (internal/network/sync.go) use this shared type to encode/decode
 // relay protocol messages.
 //

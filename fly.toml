@@ -1,4 +1,4 @@
-app = 'termtalk-relay'
+app = 'nod-relay'
 primary_region = 'lhr'
 
 # Keep exactly 1 machine. Multi-machine requires shared external state
@@ -7,7 +7,7 @@ primary_region = 'lhr'
   min_machines_running = 1
 
 [mounts]
-  source = "termtalk_data"
+  source = "nod_data"
   destination = "/data"
 
 

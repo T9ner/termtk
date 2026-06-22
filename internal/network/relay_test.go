@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"termtalk/internal/db"
-	"termtalk/internal/protocol"
+	"nod/internal/db"
+	"nod/internal/protocol"
 )
 
 // MockRelayServer represents an in-memory relay server for integration tests.
@@ -216,7 +216,7 @@ func TestSyncManagerViaRelay(t *testing.T) {
 	}
 
 	// 3. Send Message from Alice to Bob (routes through relay)
-	err := aliceSync.SendMessage(bobProfile.UUID, "Hello via relay Bob!")
+	err := aliceSync.SendMessage(bobProfile.UUID, "Hello via relay Bob!", "")
 	if err != nil {
 		t.Fatalf("failed to send message: %v", err)
 	}

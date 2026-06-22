@@ -1,0 +1,1487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terminal — Design System Specification</title>
+  <!-- Load Geist and Inter from Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&family=Inter:wght@100..900&display=swap" rel="stylesheet">
+  
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #090D13;
+      --surface: #111519;
+      --surface-elevated: #1A1E24;
+      --border: #252A30;
+      --border-focus: #3A4048;
+      --text-primary: #E8EAED;
+      --text-secondary: #8B9098;
+      --text-muted: #505660;
+      --accent: #6EE8B3;
+      --accent-hover: #5AD9A0;
+      --accent-subtle: rgba(110, 232, 179, 0.03);
+      --accent-border: rgba(110, 232, 179, 0.08);
+      --sent-msg: #151A20;
+      --received-msg: #1A1E24;
+      --danger: #FF6B6B;
+      --warning: #FFD93D;
+      
+      --font-display: "Geist", "Inter", sans-serif;
+      --font-body: "Geist", "Inter", sans-serif;
+      --font-mono: "Geist Mono", "JetBrains Mono", monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-size: 0.9rem;
+      line-height: 1.6;
+      padding: 0;
+      min-height: 100vh;
+      overflow-x: hidden;
+      position: relative;
+      font-feature-settings: "kern" 1, "liga" 1;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Cinematic Film Grain */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      opacity: 0.025;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+      background-size: 128px 128px;
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    /* Tactical CAD Canvas Grid */
+    .grid-overlay {
+      position: fixed;
+      inset: 0;
+      background-image: 
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 60px 60px;
+      opacity: 0.15;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Cinematic Glow Blooms */
+    .glow-bloom-1 {
+      position: fixed;
+      bottom: -10%;
+      left: -10%;
+      width: 50%;
+      height: 50%;
+      background: radial-gradient(circle, rgba(110, 232, 179, 0.025), transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+      animation: float-glow 25s ease-in-out infinite alternate;
+    }
+
+    .glow-bloom-2 {
+      position: fixed;
+      top: -10%;
+      right: -10%;
+      width: 40%;
+      height: 40%;
+      background: radial-gradient(circle, rgba(90, 217, 160, 0.015), transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+      animation: float-glow 30s ease-in-out infinite alternate-reverse;
+    }
+
+    @keyframes float-glow {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(40px, -20px) scale(1.1); }
+    }
+
+    /* Core Layout */
+    .app-layout {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      min-height: 100vh;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Sidebar Column (Brand Title + Menu) */
+    .sidebar {
+      border-right: 1px solid var(--border);
+      padding: 60px 40px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: rgba(9, 13, 19, 0.85);
+      backdrop-filter: blur(12px);
+    }
+
+    .brand-section {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Giant Geist Brand Header */
+    .brand-title {
+      font-family: var(--font-display);
+      font-weight: 500;
+      font-size: 96px;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      color: var(--text-primary);
+      margin-bottom: 24px;
+      position: relative;
+      display: inline-block;
+    }
+    
+    .brand-title span {
+      color: var(--accent);
+    }
+
+    .brand-tagline {
+      font-size: 1.1rem;
+      font-weight: 400;
+      color: var(--text-secondary);
+      line-height: 1.4;
+      max-width: 280px;
+      margin-bottom: 32px;
+    }
+
+    .nav-menu {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      transition: all 150ms ease;
+    }
+
+    .nav-item:hover {
+      color: var(--accent);
+      background: var(--accent-subtle);
+      border-color: var(--accent-border);
+    }
+
+    .system-status {
+      border-top: 1px solid var(--border);
+      padding-top: 24px;
+    }
+
+    .status-title {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-feature-settings: "kern" 1;
+      margin-bottom: 12px;
+    }
+
+    .status-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      font-family: var(--font-mono);
+      color: var(--text-secondary);
+    }
+
+    .status-val {
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .status-indicator {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    /* Content Column */
+    .content-area {
+      padding: 60px 80px;
+      max-width: 1100px;
+    }
+
+    section {
+      margin-bottom: 64px;
+      scroll-margin-top: 60px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+
+    .section-num {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--accent);
+    }
+
+    h2 {
+      font-family: var(--font-display);
+      font-size: 1.5rem;
+      font-weight: 500;
+      color: var(--text-primary);
+      letter-spacing: -0.01em;
+      hyphens: none;
+    }
+
+    /* COLOR PALETTE SWATCHES */
+    .swatches-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 16px;
+    }
+
+    .swatch-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      cursor: pointer;
+      position: relative;
+      transition: all 150ms ease;
+    }
+
+    .swatch-card:hover {
+      border-color: var(--accent-border);
+      transform: translateY(-2px);
+    }
+
+    .swatch-color {
+      height: 96px;
+      width: 100%;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+    }
+
+    .swatch-info {
+      padding: 12px;
+    }
+
+    .swatch-name {
+      font-weight: 500;
+      font-size: 0.85rem;
+      color: var(--text-primary);
+    }
+
+    .swatch-value-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 4px;
+    }
+
+    .swatch-hex {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .copy-indicator {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      opacity: 0;
+      transition: opacity 150ms ease;
+    }
+
+    .swatch-card:hover .copy-indicator {
+      opacity: 1;
+    }
+
+    /* Toast Notification (Copy Feedback) */
+    .copy-toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--accent);
+      color: var(--bg);
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      font-weight: 600;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    .copy-toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* TYPOGRAPHY */
+    .type-specimen {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .type-meta {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+      margin-bottom: 4px;
+    }
+
+    .type-role {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-feature-settings: "kern" 1;
+    }
+
+    .type-css {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .type-val-display {
+      font-family: var(--font-display);
+      font-weight: 500;
+      font-size: 56px;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      color: var(--text-primary);
+    }
+
+    .type-val-body {
+      font-family: var(--font-body);
+      font-weight: 400;
+      font-size: 0.95rem;
+      line-height: 1.6;
+      color: var(--text-primary);
+    }
+
+    .type-val-mono {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      background: var(--bg);
+      padding: 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      line-height: 1.5;
+    }
+
+    /* SPACING SYSTEM - CAD RULER */
+    .ruler-container {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .ruler-item {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .ruler-label-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .ruler-name {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .ruler-token {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .ruler-bar-wrapper {
+      display: flex;
+      align-items: center;
+      position: relative;
+    }
+
+    .ruler-bar {
+      height: 12px;
+      background: var(--accent-subtle);
+      border: 1px dashed var(--accent-border);
+      position: relative;
+      transition: width 300ms ease;
+    }
+
+    .ruler-bar::after {
+      content: '';
+      position: absolute;
+      right: 0;
+      top: -4px;
+      bottom: -4px;
+      width: 2px;
+      background: var(--accent);
+    }
+
+    .ruler-val {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--accent);
+      margin-left: 12px;
+    }
+
+    /* COMPONENT SANDBOXES */
+    .components-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 900px) {
+      .components-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .component-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .component-box-header {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+      margin-bottom: 4px;
+    }
+
+    .component-title {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-feature-settings: "kern" 1;
+    }
+
+    .component-interactive-tag {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--accent);
+      background: var(--accent-subtle);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    /* BUTTONS */
+    .btn-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 24px;
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      border-radius: 999px;
+      font-family: var(--font-body);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 150ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      transform: scale(1.02);
+    }
+
+    .btn-primary:active {
+      transform: scale(0.98);
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 24px;
+      background: transparent;
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-family: var(--font-body);
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 150ms ease;
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--accent-border);
+      color: var(--accent);
+      background: var(--accent-subtle);
+    }
+
+    .btn-danger {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 24px;
+      background: rgba(255, 107, 107, 0.1);
+      color: var(--danger);
+      border: 1px solid rgba(255, 107, 107, 0.2);
+      border-radius: 999px;
+      font-family: var(--font-body);
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 150ms ease;
+    }
+
+    .btn-danger:hover {
+      background: var(--danger);
+      color: var(--bg);
+    }
+
+    /* INPUTS */
+    .input-wrapper {
+      position: relative;
+      width: 100%;
+    }
+
+    .input-field {
+      width: 100%;
+      padding: 10px 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-size: 0.85rem;
+      outline: none;
+      transition: all 150ms ease;
+    }
+
+    .input-field:focus {
+      border-color: var(--accent-border);
+      box-shadow: 0 0 0 1px var(--accent-border);
+    }
+
+    .input-field::placeholder {
+      color: var(--text-muted);
+    }
+
+    .input-feedback {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* INTERACTIVE CHAT SANDBOX */
+    .chat-sandbox {
+      display: flex;
+      flex-direction: column;
+      height: 280px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      overflow: hidden;
+    }
+
+    .chat-messages {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      scroll-behavior: smooth;
+    }
+
+    .message-group {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      max-width: 85%;
+    }
+
+    .message-group.sent {
+      margin-left: auto;
+      flex-direction: row-reverse;
+    }
+
+    .avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .message-bubble-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .message-sender {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      color: var(--text-secondary);
+      margin-left: 4px;
+    }
+
+    .message-bubble {
+      padding: 8px 12px;
+      font-size: 0.85rem;
+      line-height: 1.4;
+      border-radius: 12px;
+    }
+
+    .message-group.received .message-bubble {
+      background: var(--received-msg);
+      color: var(--text-primary);
+      border-bottom-left-radius: 3px;
+    }
+
+    .message-group.sent .message-bubble {
+      background: var(--sent-msg);
+      color: var(--text-primary);
+      border-bottom-right-radius: 3px;
+    }
+
+    .message-time {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      margin-top: 1px;
+      align-self: flex-end;
+    }
+
+    .message-group.sent .message-time {
+      align-self: flex-start;
+      margin-left: auto;
+    }
+
+    .chat-input-bar {
+      display: flex;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      padding: 8px;
+      gap: 8px;
+    }
+
+    .btn-send {
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      border-radius: 6px;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 150ms ease;
+      flex-shrink: 0;
+    }
+
+    .btn-send:hover {
+      background: var(--accent-hover);
+      transform: scale(1.03);
+    }
+
+    /* CONTACT LIST */
+    .contact-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .contact-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 150ms ease;
+    }
+
+    .contact-item:hover {
+      background: var(--accent-subtle);
+      border-color: var(--accent-border);
+    }
+
+    .contact-item.active {
+      background: var(--surface-elevated);
+      border-color: var(--border);
+    }
+
+    .avatar-wrapper {
+      position: relative;
+    }
+
+    .avatar-status {
+      position: absolute;
+      bottom: -1px;
+      right: -1px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      border: 1.5px solid var(--surface);
+    }
+
+    .avatar-status.online {
+      background: var(--accent);
+    }
+
+    .avatar-status.offline {
+      background: var(--text-muted);
+    }
+
+    .contact-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .contact-name-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .contact-name {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .contact-time {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      color: var(--text-muted);
+    }
+
+    .contact-meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 1px;
+    }
+
+    .contact-status-msg {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .badge-unread {
+      background: var(--accent);
+      color: var(--bg);
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 10px;
+    }
+
+    /* CLI SIMULATOR (TUI PREVIEW) */
+    .cli-simulator {
+      background: #0A0E14;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      overflow: hidden;
+    }
+
+    .cli-header {
+      background: rgba(15, 26, 40, 0.5);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .cli-dot-group {
+      display: flex;
+      gap: 6px;
+    }
+
+    .cli-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--border);
+    }
+
+    .cli-dot.red { background: var(--danger); }
+    .cli-dot.yellow { background: var(--warning); }
+    .cli-dot.green { background: var(--accent); }
+
+    .cli-title {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-feature-settings: "kern" 1;
+    }
+
+    .cli-body {
+      padding: 20px;
+      line-height: 1.5;
+      color: var(--text-secondary);
+      min-height: 160px;
+    }
+
+    .cli-line {
+      margin-bottom: 10px;
+    }
+
+    .cli-prompt {
+      color: var(--accent);
+    }
+
+    .cli-cmd {
+      color: var(--text-primary);
+    }
+
+    .cli-out {
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+    }
+
+    .fade-in {
+      animation: fadeIn 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* RESPONSIVE BREAKPOINTS */
+    @media (max-width: 1024px) {
+      .app-layout {
+        grid-template-columns: 1fr;
+      }
+      .sidebar {
+        height: auto;
+        position: relative;
+        padding: 40px;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+      }
+      .brand-title {
+        font-size: 64px;
+      }
+      .content-area {
+        padding: 40px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .brand-title {
+        font-size: 48px;
+      }
+      .content-area {
+        padding: 24px;
+      }
+      .swatches-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+      .ruler-item {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="grid-overlay"></div>
+
+  <div class="app-layout">
+    <!-- Sticky Brand Column -->
+    <aside class="sidebar">
+      <div class="brand-section">
+        <!-- Giant Geist Header -->
+        <h1 class="brand-title">Terminal<span>.</span></h1>
+        <p class="brand-tagline">Communication that never breaks.</p>
+        
+        <nav class="nav-menu">
+          <a href="#colors" class="nav-item">
+            <span>[01]</span> Colors
+          </a>
+          <a href="#typography" class="nav-item">
+            <span>[02]</span> Typography
+          </a>
+          <a href="#spacing" class="nav-item">
+            <span>[03]</span> Spacing
+          </a>
+          <a href="#components" class="nav-item">
+            <span>[04]</span> Components
+          </a>
+          <a href="#cli" class="nav-item">
+            <span>[05]</span> TUI Simulation
+          </a>
+        </nav>
+      </div>
+
+      <div class="system-status">
+        <div class="status-title">System Architecture</div>
+        <div class="status-list">
+          <div class="status-row">
+            <span>Relay Link</span>
+            <span class="status-val"><span class="status-indicator"></span>Online</span>
+          </div>
+          <div class="status-row">
+            <span>UDP LAN Discovery</span>
+            <span class="status-val" style="color:var(--text-secondary)">Active</span>
+          </div>
+          <div class="status-row">
+            <span>SQLite Sync</span>
+            <span class="status-val" style="color:var(--text-secondary)">Synced</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Column -->
+    <main class="content-area">
+      
+      <!-- 1. COLOR SWATCHES -->
+      <section id="colors">
+        <div class="section-header">
+          <span class="section-num">01 //</span>
+          <h2>Color Palette</h2>
+        </div>
+        <p style="color: var(--text-secondary); margin-bottom: 24px; max-width: 600px;">
+          The colors of Terminal convey an offline-first command interface. Saturated mint is deployed only for high-priority interactive signals. Click any card to copy its HEX value.
+        </p>
+        <div class="swatches-grid">
+          <div class="swatch-card" onclick="copyHex(this, '#090D13')">
+            <div class="swatch-color" style="background:#090D13"></div>
+            <div class="swatch-info">
+              <div class="swatch-name">Background</div>
+              <div class="swatch-value-row">
+                <span class="swatch-hex">#090D13</span>
+                <span class="copy-indicator">COPY</span>
+              </div>
+            </div>
+          </div>
+          <div class="swatch-card" onclick="copyHex(this, '#111519')">
+            <div class="swatch-color" style="background:#111519"></div>
+            <div class="swatch-info">
+              <div class="swatch-name">Surface</div>
+              <div class="swatch-value-row">
+                <span class="swatch-hex">#111519</span>
+                <span class="copy-indicator">COPY</span>
+              </div>
+            </div>
+          </div>
+          <div class="swatch-card" onclick="copyHex(this, '#1A1E24')">
+            <div class="swatch-color" style="background:#1A1E24"></div>
+            <div class="swatch-info">
+              <div class="swatch-name">Elevated</div>
+              <div class="swatch-value-row">
+                <span class="swatch-hex">#1A1E24</span>
+                <span class="copy-indicator">COPY</span>
+              </div>
+            </div>
+          </div>
+          <div class="swatch-card" onclick="copyHex(this, '#252A30')">
+            <div class="swatch-color" style="background:#252A30"></div>
+            <div class="swatch-info">
+              <div class="swatch-name">Border</div>
+              <div class="swatch-value-row">
+                <span class="swatch-hex">#252A30</span>
+                <span class="copy-indicator">COPY</span>
+              </div>
+            </div>
+          </div>
+          <div class="swatch-card" onclick="copyHex(this, '#E8EAED')">
+            <div class="swatch-color" style="background:#E8EAED"></div>
+            <div class="swatch-info">
+              <div class="swatch-name">Text Primary</div>
+              <div class="swatch-value-row">
+                <span class="swatch-hex">#E8EAED</span>
+                <span class="copy-indicator">COPY</span>
+              </div>
+            </div>
+          </div>
+          <div class="swatch-card" onclick="copyHex(this, '#8B9098')">
+            <div class="swatch-color" style="background:#8B9098"></div>
+            <div class="swatch-info">
+              <div class="swatch-name">Text Secondary</div>
+              <div class="swatch-value-row">
+                <span class="swatch-hex">#8B9098</span>
+                <span class="copy-indicator">COPY</span>
+              </div>
+            </div>
+          </div>
+          <div class="swatch-card" onclick="copyHex(this, '#505660')">
+            <div class="swatch-color" style="background:#505660"></div>
+            <div class="swatch-info">
+              <div class="swatch-name">Text Muted</div>
+              <div class="swatch-value-row">
+                <span class="swatch-hex">#505660</span>
+                <span class="copy-indicator">COPY</span>
+              </div>
+            </div>
+          </div>
+          <div class="swatch-card" onclick="copyHex(this, '#7DFFC2')">
+            <div class="swatch-color" style="background:#7DFFC2"></div>
+            <div class="swatch-info">
+              <div class="swatch-name">Accent (Mint)</div>
+              <div class="swatch-value-row">
+                <span class="swatch-hex">#7DFFC2</span>
+                <span class="copy-indicator">COPY</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. TYPOGRAPHY -->
+      <section id="typography">
+        <div class="section-header">
+          <span class="section-num">02 //</span>
+          <h2>Typography</h2>
+        </div>
+        <p style="color: var(--text-secondary); margin-bottom: 24px; max-width: 600px;">
+          Clean geometric grotesque typeset paired with high-performance mono sizing.
+        </p>
+
+        <div class="type-specimen">
+          <div class="type-meta">
+            <span class="type-role">Display Headline</span>
+            <span class="type-css">Geist 500 / 96px / -0.04em</span>
+          </div>
+          <div class="type-val-display">Terminal.</div>
+        </div>
+
+        <div class="type-specimen">
+          <div class="type-meta">
+            <span class="type-role">Body Text</span>
+            <span class="type-css">Geist 400 / 0.95rem / 1.6</span>
+          </div>
+          <div class="type-val-body">
+            Nod is a decentralized messaging engine designed to facilitate offline-first communication over peer LAN grids, internet relay connections, and sneakernet nodes. Focus on zero dependency, absolute privacy.
+          </div>
+        </div>
+
+        <div class="type-specimen">
+          <div class="type-meta">
+            <span class="type-role">Monospace Codes & Metadata</span>
+            <span class="type-css">Geist Mono 400 / 0.85rem</span>
+          </div>
+          <div class="type-val-mono">
+            $ nod-relay --port 55558 --host 0.0.0.0<br>
+            [14:24:02] RELAY: running machine scale=1 region=lhr ip=66.241.124.156<br>
+            [14:24:03] REGISTERED: peer_uuid=d3b07384-d113-43b2-bdda-562189784153 name=rogue
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. SPACING -->
+      <section id="spacing">
+        <div class="section-header">
+          <span class="section-num">03 //</span>
+          <h2>Spacing Matrix</h2>
+        </div>
+        
+        <div class="ruler-container">
+          <div class="ruler-item">
+            <div class="ruler-label-group">
+              <span class="ruler-name">Sidebar Width</span>
+              <span class="ruler-token">--sidebar-width</span>
+            </div>
+            <div class="ruler-bar-wrapper">
+              <div class="ruler-bar" style="width: 260px"></div>
+              <span class="ruler-val">260px</span>
+            </div>
+          </div>
+          <div class="ruler-item">
+            <div class="ruler-label-group">
+              <span class="ruler-name">App Header Height</span>
+              <span class="ruler-token">--header-height</span>
+            </div>
+            <div class="ruler-bar-wrapper">
+              <div class="ruler-bar" style="width: 56px"></div>
+              <span class="ruler-val">56px</span>
+            </div>
+          </div>
+          <div class="ruler-item">
+            <div class="ruler-label-group">
+              <span class="ruler-name">Outer Page Padding</span>
+              <span class="ruler-token">--panel-padding</span>
+            </div>
+            <div class="ruler-bar-wrapper">
+              <div class="ruler-bar" style="width: 24px"></div>
+              <span class="ruler-val">24px</span>
+            </div>
+          </div>
+          <div class="ruler-item">
+            <div class="ruler-label-group">
+              <span class="ruler-name">Chat Bubble Margin</span>
+              <span class="ruler-token">--bubble-gap</span>
+            </div>
+            <div class="ruler-bar-wrapper">
+              <div class="ruler-bar" style="width: 8px"></div>
+              <span class="ruler-val">8px</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. COMPONENTS -->
+      <section id="components">
+        <div class="section-header">
+          <span class="section-num">04 //</span>
+          <h2>Component Sandbox</h2>
+        </div>
+        
+        <div class="components-grid">
+          <!-- Card: Interactive Buttons -->
+          <div class="component-box">
+            <div class="component-box-header">
+              <span class="component-title">Buttons</span>
+              <span class="component-interactive-tag">Hover Live</span>
+            </div>
+            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 8px;">
+              Tactile pill-shaped components utilizing smooth 150ms transform state escalations.
+            </p>
+            <div class="btn-container">
+              <button class="btn-primary">Primary CTA</button>
+              <button class="btn-secondary">Secondary Option</button>
+              <button class="btn-danger">Destructive Action</button>
+            </div>
+          </div>
+
+          <!-- Card: Inputs -->
+          <div class="component-box">
+            <div class="component-box-header">
+              <span class="component-title">Text Input Fields</span>
+              <span class="component-interactive-tag">Focus State</span>
+            </div>
+            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 8px;">
+              Zero shadows. Card lines use 1px border transitions to indicate user focus.
+            </p>
+            <div class="input-wrapper">
+              <input class="input-field" type="text" placeholder="Enter peer coordinates...">
+              <span class="input-feedback">Expected format: username@ip:port</span>
+            </div>
+          </div>
+
+          <!-- Card: Interactive Chat Sandbox -->
+          <div class="component-box" style="grid-column: span 2;">
+            <div class="component-box-header">
+              <span class="component-title">Interactive Message Flow Sandbox</span>
+              <span class="component-interactive-tag">Live Simulator</span>
+            </div>
+            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 4px;">
+              Type a message below and hit send. Watch how messages render in the cinematic bubble container.
+            </p>
+            
+            <div class="chat-sandbox">
+              <div class="chat-messages" id="chatSandbox">
+                <div class="message-group received">
+                  <div class="avatar">R</div>
+                  <div class="message-bubble-wrapper">
+                    <span class="message-sender">rogue</span>
+                    <div class="message-bubble">Hey! Did you check out the new design system details?</div>
+                    <span class="message-time">14:23</span>
+                  </div>
+                </div>
+                <div class="message-group sent">
+                  <div class="message-bubble-wrapper">
+                    <div class="message-bubble">Yes, the Geist font integration looks incredibly sharp. No box shadows.</div>
+                    <span class="message-time">14:24</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="chat-input-bar">
+                <input type="text" id="chatInput" class="input-field" placeholder="Write a live test message..." autocomplete="off">
+                <button type="button" id="chatSendBtn" class="btn-send">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card: Contact List items -->
+          <div class="component-box">
+            <div class="component-box-header">
+              <span class="component-title">Peer Roster Items</span>
+              <span class="component-interactive-tag">Interactive States</span>
+            </div>
+            <div class="contact-list">
+              <div class="contact-item active">
+                <div class="avatar-wrapper">
+                  <div class="avatar">R</div>
+                  <span class="avatar-status online"></span>
+                </div>
+                <div class="contact-info">
+                  <div class="contact-name-row">
+                    <span class="contact-name">rogue</span>
+                    <span class="contact-time">14:24</span>
+                  </div>
+                  <div class="contact-meta-row">
+                    <span class="contact-status-msg">Online — Connected via LAN</span>
+                    <span class="badge-unread">2</span>
+                  </div>
+                </div>
+              </div>
+              <div class="contact-item">
+                <div class="avatar-wrapper">
+                  <div class="avatar" style="border-color: var(--border); color: var(--text-secondary);">M</div>
+                  <span class="avatar-status offline"></span>
+                </div>
+                <div class="contact-info">
+                  <div class="contact-name-row">
+                    <span class="contact-name">morpheus</span>
+                    <span class="contact-time">12:10</span>
+                  </div>
+                  <div class="contact-meta-row">
+                    <span class="contact-status-msg">offline — relay outbox queued</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card: Typography Scale Rules -->
+          <div class="component-box">
+            <div class="component-box-header">
+              <span class="component-title">Interactive Elements Checklist</span>
+              <span class="component-interactive-tag">Standards</span>
+            </div>
+            <ul style="font-size: 0.8rem; color: var(--text-secondary); list-style-type: square; padding-left: 16px; display: flex; flex-direction: column; gap: 8px;">
+              <li>All transitions must use <code style="color:var(--accent)">150ms ease</code> duration curves</li>
+              <li>Signature mint <code style="color:var(--accent)">#7DFFC2</code> occurs maximum 3 times per viewport</li>
+              <li>Contrast ratio must exceed <code style="color:var(--accent)">4.5:1</code> for standard visibility</li>
+              <li>Depth is designated by background variations, never box shadows</li>
+              <li>Film grain opacity constant set at <code style="color:var(--accent)">2.5%</code> scale</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. CLI SIMULATOR -->
+      <section id="cli">
+        <div class="section-header">
+          <span class="section-num">05 //</span>
+          <h2>TUI CLI Output Simulation</h2>
+        </div>
+        <p style="color: var(--text-secondary); margin-bottom: 24px; max-width: 600px;">
+          Nod client TUI runs in the command line utilizing the same structural color schemes mapped to Bubble Tea and Lipgloss styles.
+        </p>
+
+        <div class="cli-simulator">
+          <div class="cli-header">
+            <div class="cli-dot-group">
+              <span class="cli-dot red"></span>
+              <span class="cli-dot yellow"></span>
+              <span class="cli-dot green"></span>
+            </div>
+            <span class="cli-title">nod-tui-shell</span>
+            <span style="font-size: 0.65rem; color: var(--text-muted);">v0.5.0-beta</span>
+          </div>
+          <div class="cli-body">
+            <div class="cli-line">
+              <span class="cli-prompt">user@nod ~ %</span> <span class="cli-cmd">nod status</span>
+            </div>
+            <div class="cli-out">Connecting to local datastore... OK
+Local DB: C:\Users\HP\AppData\Local\nod\nod.db (142 messages)
+UDP Discovery: Active on 0.0.0.0:55559
+Local Peers Online: 
+  * rogue (192.168.1.42:55558) - Connectable via LAN TCP Sync
+Relay Status: Connected to fly.io primary (nod-relay.fly.dev:55558)
+Unread Inbox: 2 messages from rogue. Type <span style="color:var(--accent)">nod chat rogue</span> to open conversation.</div>
+          </div>
+        </div>
+      </section>
+
+      <footer style="margin-top: 80px; border-top: 1px solid var(--border); padding-top: 24px; color: var(--text-muted); font-size: 0.75rem; display: flex; justify-content: space-between;">
+        <span>Generated via Open Design × Antigravity CLI</span>
+        <span>Nod Spec Core v1.1.0</span>
+      </footer>
+
+    </main>
+  </div>
+
+  <!-- Toast for copying HEX values -->
+  <div id="copyToast" class="copy-toast">HEX VALUE COPIED</div>
+
+  <script>
+    // Copy HEX to Clipboard
+    function copyHex(element, hexValue) {
+      navigator.clipboard.writeText(hexValue).then(() => {
+        const toast = document.getElementById('copyToast');
+        toast.textContent = `HEX ${hexValue} COPIED`;
+        toast.classList.add('show');
+        
+        setTimeout(() => {
+          toast.classList.remove('show');
+        }, 1500);
+      }).catch(err => {
+        console.error('Failed to copy text: ', err);
+      });
+    }
+
+    // Chat Sandbox Logic
+    const chatInput = document.getElementById('chatInput');
+    const chatSendBtn = document.getElementById('chatSendBtn');
+    const chatSandbox = document.getElementById('chatSandbox');
+
+    function escapeHtml(unsafe) {
+      return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function addMessage() {
+      const text = chatInput.value.trim();
+      if (!text) return;
+
+      // Create Sent Message
+      const msgGroup = document.createElement('div');
+      msgGroup.className = 'message-group sent fade-in';
+      
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      msgGroup.innerHTML = `
+        <div class="message-bubble-wrapper">
+          <div class="message-bubble">${escapeHtml(text)}</div>
+          <span class="message-time">${timeStr}</span>
+        </div>
+      `;
+
+      chatSandbox.appendChild(msgGroup);
+      chatInput.value = '';
+      chatSandbox.scrollTop = chatSandbox.scrollHeight;
+
+      // Trigger Automated Reply
+      setTimeout(() => {
+        const responses = [
+          "Nice! The transition curve feels exactly right.",
+          "Received frame via UDP discovery sync protocol... OK.",
+          "Message written to SQLite offline datastore.",
+          "Check out the typography spec sheet above.",
+          "Terminal cinematic style guidelines are active."
+        ];
+        const randomResp = responses[Math.floor(Math.random() * responses.length)];
+
+        const replyGroup = document.createElement('div');
+        replyGroup.className = 'message-group received fade-in';
+        
+        const replyTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        replyGroup.innerHTML = `
+          <div class="avatar">R</div>
+          <div class="message-bubble-wrapper">
+            <span class="message-sender">rogue</span>
+            <div class="message-bubble">${randomResp}</div>
+            <span class="message-time">${replyTime}</span>
+          </div>
+        `;
+
+        chatSandbox.appendChild(replyGroup);
+        chatSandbox.scrollTop = chatSandbox.scrollHeight;
+      }, 1000);
+    }
+
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        addMessage();
+      }
+    });
+
+    chatSendBtn.addEventListener('click', addMessage);
+  </script>
+</body>
+</html>

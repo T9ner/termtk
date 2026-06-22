@@ -1,6 +1,6 @@
 # Binaries
-/termtalk
-/termtalk-relay
+/nod
+/nod-relay
 *.exe
 
 # Databases

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"termtalk/internal/crypto"
+	"nod/internal/crypto"
 )
 
 // VerificationCode computes a 6-digit code from two public keys.
@@ -98,6 +98,9 @@ type Contact struct {
 	PublicKey       []byte    `json:"public_key"`
 	Verified        bool      `json:"verified"`
 	X25519PublicKey []byte    `json:"x25519_public_key"`
+	Blocked         bool      `json:"blocked"`
+	Pinned          bool      `json:"pinned"`
+	Archived        bool      `json:"archived"`
 }
 
 // MessageStatus represents the lifecycle state of a Message.
@@ -119,8 +122,10 @@ type Message struct {
 	Recipient string    `json:"recipient_uuid"`
 	Content   string    `json:"content"`
 	Timestamp time.Time `json:"timestamp"`
-	Status    string    `json:"status"`    // MessageStatus: draft, queued, synced, ack
-	Encrypted bool      `json:"encrypted"` // True if this message was sent/received encrypted
+	Status    string    `json:"status"`             // MessageStatus: draft, queued, synced, ack
+	Encrypted bool      `json:"encrypted"`          // True if this message was sent/received encrypted
+	Edited    bool      `json:"edited"`             // True if this message was edited
+	ReplyTo   string    `json:"reply_to,omitempty"` // ID of the message being replied to
 }
 
 // GenerateID computes the unique SHA-256 hash for a message to prevent duplicates and ensure integrity.
@@ -144,4 +149,13 @@ func GenerateReactionID(messageID, senderUUID, emoji string) string {
 	raw := messageID + senderUUID + emoji
 	hash := sha256.Sum256([]byte(raw))
 	return fmt.Sprintf("%x", hash)
+}
+
+// Attachment represents a file attached to a message.
+type Attachment struct {
+	ID       string `json:"id"`        // SHA-256 of file content
+	Filename string `json:"filename"`  // Original filename
+	MIMEType string `json:"mime_type"` // MIME type
+	Size     int64  `json:"size"`      // File size in bytes
+	MsgID    string `json:"msg_id"`    // Associated message ID
 }

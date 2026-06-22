@@ -10,9 +10,9 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"termtalk/internal/client"
-	"termtalk/internal/db"
-	"termtalk/internal/protocol"
+	"nod/internal/client"
+	"nod/internal/db"
+	"nod/internal/protocol"
 
 	"github.com/gen2brain/beeep"
 )
@@ -124,7 +124,7 @@ func (m *Model) ReloadMessages() {
 	}
 
 	contact := m.Contacts[m.SelectedIdx]
-	history, err := m.Client.GetChatHistory(contact.UUID)
+	history, err := m.Client.GetChatHistory(contact.UUID, 0, 0)
 	if err == nil {
 		m.ChatHistory = history
 
@@ -397,7 +397,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if text != "" && m.SelectedIdx >= 0 {
 						contact := m.Contacts[m.SelectedIdx]
 						text = ReplaceShortcodes(text)
-						_ = m.Client.SendMessage(contact.UUID, text)
+						_ = m.Client.SendMessage(contact.UUID, text, "")
 						m.MsgInput.SetValue("")
 						m.ReloadMessages()
 					}
@@ -757,7 +757,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						break
 					}
 				}
-				title := fmt.Sprintf("TermTalk \u2014 @%s", senderName)
+				title := fmt.Sprintf("Nod \u2014 @%s", senderName)
 				body := msg.Message.Content
 				if len(body) > 50 {
 					body = body[:50]

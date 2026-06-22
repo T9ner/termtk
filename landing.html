@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terminal | Precision Instrument</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400&family=Manrope:wght@200;300;400;500&display=swap" rel="stylesheet">
+    <style>
+        :root[data-theme="dark"] {
+            --brand-light: #b5f5c9; 
+            --brand-muted: #6b8274; 
+            --bg-pure: #010302;     
+            --bg-elevated: #050a07; 
+            --line-color: rgba(181, 245, 201, 0.08); 
+            --text-main: #e8f0eb;   
+            --artifact-bg: #000;
+            --artifact-shadow: rgba(0,0,0,0.8);
+            --artifact-grid: rgba(255,255,255,0.03);
+            --spotlight-1: rgba(68, 222, 140, 0.08);
+            --spotlight-2: rgba(17, 100, 75, 0.03);
+            --noise-blend: overlay;
+            --noise-opacity: 0.12;
+            --noise-filter: none;
+        }
+
+        :root[data-theme="light"] {
+            --brand-light: #11644b; 
+            --brand-muted: #6b8274; 
+            --bg-pure: #fcfdfc;     
+            --bg-elevated: #f3f6f4; 
+            --line-color: rgba(2, 9, 7, 0.08); 
+            --text-main: #010302;   
+            --artifact-bg: #ffffff;
+            --artifact-shadow: rgba(0,0,0,0.05);
+            --artifact-grid: rgba(2, 9, 7, 0.03);
+            --spotlight-1: rgba(68, 222, 140, 0.15);
+            --spotlight-2: rgba(17, 100, 75, 0.05);
+            --noise-blend: multiply;
+            --noise-opacity: 0.4;
+            --noise-filter: invert(1);
+        }
+
+        :root {
+            --ease-lux: cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body, html {
+            width: 100%;
+            background-color: var(--bg-pure);
+            font-family: 'Manrope', sans-serif;
+            color: var(--text-main);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            overflow-x: hidden;
+            scroll-behavior: smooth;
+            transition: background-color 0.6s var(--ease-lux), color 0.6s var(--ease-lux);
+        }
+
+        /* --- MATERIAL HONESTY: TEXTURES & LIGHTING --- */
+
+        .noise {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            opacity: var(--noise-opacity);
+            pointer-events: none;
+            mix-blend-mode: var(--noise-blend);
+            filter: var(--noise-filter);
+            transition: opacity 0.6s var(--ease-lux);
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        }
+
+        .spotlight {
+            position: fixed;
+            top: -20vh;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100vw;
+            height: 80vh;
+            background: radial-gradient(
+                ellipse at top center, 
+                var(--spotlight-1) 0%, 
+                var(--spotlight-2) 40%, 
+                rgba(1, 3, 2, 0) 70%
+            );
+            filter: blur(80px);
+            z-index: 1;
+            pointer-events: none;
+            transition: background 0.6s var(--ease-lux);
+        }
+
+        /* --- STRUCTURAL GRID --- */
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 0 4vw;
+            position: relative;
+            z-index: 10;
+        }
+
+        /* --- NAVIGATION --- */
+
+        header {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            padding: 1.5rem 4vw;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            mask-image: linear-gradient(to bottom, black 60%, transparent);
+            -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent);
+            z-index: -1;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: var(--brand-light);
+            text-decoration: none;
+            transition: color 0.6s var(--ease-lux);
+        }
+
+        .logo svg { width: 20px; height: 20px; }
+
+        .logo-text {
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+        }
+
+        .nav-center {
+            display: none;
+            gap: 2rem;
+        }
+
+        @media (min-width: 768px) {
+            .nav-center { display: flex; }
+        }
+
+        .nav-link {
+            font-size: 11px;
+            color: var(--brand-muted);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+
+        .nav-link:hover { color: var(--text-main); }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+
+        .theme-toggle {
+            background: none;
+            border: none;
+            color: var(--brand-muted);
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.3s ease;
+        }
+
+        .theme-toggle:hover { color: var(--brand-light); }
+        .theme-toggle svg { width: 16px; height: 16px; }
+
+        .action-link {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: var(--brand-light);
+            text-decoration: none;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            position: relative;
+            padding-bottom: 4px;
+            transition: color 0.6s var(--ease-lux);
+        }
+
+        .action-link::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 0;
+            width: 100%; height: 1px;
+            background-color: var(--brand-light);
+            transform: scaleX(0);
+            transform-origin: right;
+            transition: transform 0.6s var(--ease-lux), background-color 0.6s var(--ease-lux);
+        }
+
+        .action-link:hover::after {
+            transform: scaleX(1);
+            transform-origin: left;
+        }
+
+        /* --- HERO --- */
+
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding-top: 8vh;
+        }
+
+        .eyebrow {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--brand-muted);
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            margin-bottom: 1.5rem;
+            display: block;
+            transition: color 0.6s var(--ease-lux);
+        }
+
+        .hero h1 {
+            font-size: clamp(2.5rem, 5vw, 5.5rem);
+            font-weight: 200;
+            line-height: 1.05;
+            letter-spacing: -0.03em;
+            margin-bottom: 2rem;
+            max-width: 16ch;
+        }
+
+        .hero h1 span {
+            color: var(--brand-light);
+            font-weight: 400; 
+            transition: color 0.6s var(--ease-lux);
+        }
+
+        .hero p {
+            font-size: clamp(1rem, 1.5vw, 1.25rem);
+            font-weight: 300;
+            color: var(--brand-muted);
+            max-width: 460px;
+            line-height: 1.6;
+            margin-bottom: 3rem;
+            transition: color 0.6s var(--ease-lux);
+        }
+
+        .btn-acquire {
+            display: inline-flex;
+            align-items: center;
+            gap: 1rem;
+            background: transparent;
+            color: var(--text-main);
+            border: 1px solid var(--line-color);
+            padding: 1rem 2rem;
+            font-size: 11px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            text-decoration: none;
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.4s var(--ease-lux), color 0.4s var(--ease-lux);
+        }
+
+        .btn-acquire::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--text-main); 
+            transform: translateY(100%);
+            transition: transform 0.6s var(--ease-lux), background-color 0.6s var(--ease-lux);
+            z-index: -1;
+        }
+
+        .btn-acquire:hover {
+            border-color: var(--text-main);
+            color: var(--bg-pure);
+        }
+
+        .btn-acquire:hover::before { transform: translateY(0); }
+
+        /* --- GLOBAL SECTION STYLES --- */
+        
+        .section-block {
+            padding: 8vw 0;
+            border-bottom: 1px solid var(--line-color);
+        }
+
+        .section-block:last-of-type {
+            border-bottom: none;
+        }
+
+        .section-heading {
+            font-size: clamp(1.75rem, 3vw, 3rem);
+            font-weight: 300;
+            letter-spacing: -0.02em;
+            margin-bottom: 4rem;
+        }
+
+        /* --- THE ARTIFACT --- */
+
+        .artifact-container {
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: var(--artifact-bg);
+            border: 1px solid var(--line-color);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 30px 80px -20px var(--artifact-shadow),
+                        0 0 30px rgba(181, 245, 201, 0.05);
+            transition: background-color 0.6s var(--ease-lux), border-color 0.6s var(--ease-lux), box-shadow 0.6s var(--ease-lux);
+        }
+
+        .artifact-container::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: 
+                linear-gradient(to right, var(--artifact-grid) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--artifact-grid) 1px, transparent 1px);
+            background-size: 3vw 3vw;
+            pointer-events: none;
+            z-index: 1;
+            transition: background-image 0.6s var(--ease-lux);
+        }
+
+        .artifact-header {
+            height: 32px;
+            border-bottom: 1px solid var(--line-color);
+            display: flex;
+            align-items: center;
+            padding: 0 1.25rem;
+            justify-content: space-between;
+            position: relative;
+            z-index: 2;
+            transition: border-color 0.6s var(--ease-lux);
+        }
+
+        .artifact-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9px;
+            color: var(--brand-muted);
+            letter-spacing: 0.1em;
+            transition: color 0.6s var(--ease-lux);
+        }
+
+        .artifact-body {
+            padding: 2.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            line-height: 1.8;
+            color: var(--brand-muted);
+            position: relative;
+            z-index: 2;
+            overflow: hidden;
+        }
+
+        .line { display: flex; gap: 0.75rem; }
+        .line .prompt { color: var(--brand-light); opacity: 0.8; transition: color 0.6s var(--ease-lux); }
+        .line .cmd { color: var(--text-main); transition: color 0.6s var(--ease-lux); }
+        .line .out { color: var(--brand-muted); padding-left: 1.5rem; transition: color 0.6s var(--ease-lux); }
+        .cursor { display: inline-block; width: 7px; height: 1.2em; background: var(--brand-light); vertical-align: middle; animation: blink 1s step-end infinite; transition: background-color 0.6s var(--ease-lux); }
+
+        @keyframes blink { 50% { opacity: 0; } }
+
+        /* --- CAPABILITIES --- */
+
+        .cap-row {
+            display: grid;
+            grid-template-columns: 80px 1fr 1fr;
+            gap: 3rem;
+            padding: 3rem 0;
+            border-top: 1px solid var(--line-color);
+            transition: background-color 0.4s ease, border-color 0.6s var(--ease-lux);
+        }
+
+        .cap-row:hover { background-color: var(--bg-elevated); }
+
+        .cap-num {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--brand-light);
+            transition: color 0.6s var(--ease-lux);
+        }
+
+        .cap-title {
+            font-size: 1.5rem;
+            font-weight: 400;
+            letter-spacing: -0.02em;
+        }
+
+        .cap-desc {
+            font-size: 1rem;
+            line-height: 1.6;
+            color: var(--brand-muted);
+            font-weight: 300;
+            transition: color 0.6s var(--ease-lux);
+        }
+
+        /* --- DOCUMENTATION --- */
+
+        .docs-grid {
+            display: grid;
+            grid-template-columns: 1fr 1.5fr;
+            gap: 4rem;
+        }
+
+        .docs-content h3 {
+            font-size: 1.5rem;
+            font-weight: 400;
+            margin-bottom: 1rem;
+        }
+
+        .docs-content p {
+            color: var(--brand-muted);
+            line-height: 1.6;
+            font-weight: 300;
+            margin-bottom: 2rem;
+        }
+
+        .code-block {
+            background: var(--artifact-bg);
+            border: 1px solid var(--line-color);
+            padding: 2rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            color: var(--brand-muted);
+            overflow-x: auto;
+            position: relative;
+            transition: background-color 0.6s var(--ease-lux), border-color 0.6s var(--ease-lux);
+        }
+
+        .code-block .keyword { color: var(--brand-light); }
+        .code-block .string { color: var(--text-main); }
+        .code-block .comment { color: var(--brand-muted); opacity: 0.6; }
+
+        /* --- CHANGELOG --- */
+
+        .changelog-list {
+            border-left: 1px solid var(--line-color);
+            padding-left: 3rem;
+            margin-left: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 4rem;
+        }
+
+        .changelog-item {
+            position: relative;
+        }
+
+        .changelog-item::before {
+            content: '';
+            position: absolute;
+            left: -3.3rem;
+            top: 0.4rem;
+            width: 9px;
+            height: 9px;
+            background: var(--brand-light);
+            border-radius: 50%;
+            box-shadow: 0 0 0 6px var(--bg-pure);
+            transition: background-color 0.6s var(--ease-lux), box-shadow 0.6s var(--ease-lux);
+        }
+
+        .changelog-version {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.25rem;
+            color: var(--text-main);
+            margin-bottom: 0.25rem;
+            display: flex;
+            align-items: baseline;
+            gap: 1rem;
+        }
+
+        .changelog-date {
+            font-size: 10px;
+            color: var(--brand-muted);
+            letter-spacing: 0.1em;
+        }
+
+        .changelog-notes {
+            margin-top: 1rem;
+            list-style: none;
+        }
+
+        .changelog-notes li {
+            color: var(--brand-muted);
+            font-size: 1rem;
+            line-height: 1.6;
+            margin-bottom: 0.5rem;
+            position: relative;
+            padding-left: 1.5rem;
+            font-weight: 300;
+        }
+
+        .changelog-notes li::before {
+            content: '-';
+            position: absolute;
+            left: 0;
+            color: var(--line-color);
+        }
+
+        /* --- USEFUL INFO (FAQ) --- */
+
+        .faq-grid {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .faq-item {
+            padding: 2.5rem 0;
+            border-top: 1px solid var(--line-color);
+        }
+
+        .faq-question {
+            font-size: 1.25rem;
+            font-weight: 400;
+            color: var(--text-main);
+            margin-bottom: 1rem;
+        }
+
+        .faq-answer {
+            font-size: 1rem;
+            line-height: 1.6;
+            color: var(--brand-muted);
+            font-weight: 300;
+            max-width: 700px;
+        }
+
+        /* --- FOOTER --- */
+
+        footer {
+            padding: 3rem 0;
+            display: flex;
+            justify-content: space-between;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: var(--brand-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            transition: border-color 0.6s var(--ease-lux), color 0.6s var(--ease-lux);
+        }
+
+        /* --- REVEAL ANIMATIONS --- */
+
+        .reveal {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 1.2s var(--ease-lux), transform 1.2s var(--ease-lux);
+        }
+
+        .reveal.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        @media (max-width: 900px) {
+            .cap-row { grid-template-columns: 1fr; gap: 1.25rem; padding: 2.5rem 0; }
+            .cap-num { margin-bottom: -0.75rem; }
+            .docs-grid { grid-template-columns: 1fr; gap: 2rem; }
+            .changelog-list { padding-left: 2rem; margin-left: 0.5rem; }
+            .changelog-item::before { left: -2.3rem; }
+        }
+
+        /* Icons display logic based on theme */
+        [data-theme="dark"] .icon-sun { display: block; }
+        [data-theme="dark"] .icon-moon { display: none; }
+        [data-theme="light"] .icon-sun { display: none; }
+        [data-theme="light"] .icon-moon { display: block; }
+    </style>
+</head>
+<body>
+    <div class="noise"></div>
+    <div class="spotlight"></div>
+
+    <header>
+        <a href="#" class="logo">
+            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <polygon points="20,0 80,0 50,30" fill="currentColor" />
+                <polygon points="100,20 100,80 70,50" fill="currentColor" />
+                <polygon points="80,100 20,100 50,70" fill="currentColor" />
+                <polygon points="0,80 0,20 30,50" fill="currentColor" />
+            </svg>
+            <span class="logo-text">Terminal</span>
+        </a>
+        <nav class="nav-center">
+            <a href="#product" class="nav-link">Product</a>
+            <a href="#docs" class="nav-link">Documentation</a>
+            <a href="#changelog" class="nav-link">Changelog</a>
+            <a href="#info" class="nav-link">Intelligence</a>
+        </nav>
+        <div class="nav-actions">
+            <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+                <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
+            </button>
+            <a href="#download" class="action-link">Acquire v2.0</a>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- HERO -->
+        <section class="hero">
+            <span class="eyebrow reveal">Classification: Classified</span>
+            <h1 class="reveal" style="transition-delay: 0.1s;">The undisputed <span>edge.</span></h1>
+            <p class="reveal" style="transition-delay: 0.2s;">An engineering marvel disguised as a command line. Stripped of bloat, calibrated for zero latency, and designed for those who operate in the deep end.</p>
+            <div class="reveal" style="transition-delay: 0.3s;">
+                <a href="#download" class="btn-acquire">Initialize Download</a>
+            </div>
+        </section>
+
+        <!-- PRODUCT OVERVIEW -->
+        <section id="product" class="section-block">
+            <div class="artifact-container reveal">
+                <div class="artifact-header">
+                    <span class="artifact-title">sys.env.core // v2.0.4</span>
+                    <span class="artifact-title" style="opacity: 0.5;">[ SECURE ]</span>
+                </div>
+                <div class="artifact-body">
+                    <div class="line"><span class="prompt">➜</span> <span class="cmd">terminal --benchmark init</span></div>
+                    <div class="line out">Establishing hypervisor connection... OK</div>
+                    <div class="line out">Bypassing standard I/O buffer... OK</div>
+                    <div class="line out">Direct GPU memory mapping... OK</div>
+                    <br>
+                    <div class="line"><span class="prompt">➜</span> <span class="cmd">terminal run</span><span class="cursor"></span></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SPECIFICATIONS -->
+        <section class="section-block capabilities">
+            <h2 class="section-heading reveal">Technical Specifications.</h2>
+            
+            <div class="cap-row reveal">
+                <div class="cap-num">01.</div>
+                <div class="cap-title">GPU Domination.</div>
+                <div class="cap-desc">Rendering is completely bypassed from the CPU. We interface directly with your graphics architecture. The result is instantaneous stroke-to-pixel latency. It moves faster than you can perceive.</div>
+            </div>
+
+            <div class="cap-row reveal">
+                <div class="cap-num">02.</div>
+                <div class="cap-title">Absolute Isolation.</div>
+                <div class="cap-desc">Every pane, every tab operates in a mathematically isolated sandbox. A crash in one thread cannot mathematically propagate to another. Total environmental integrity.</div>
+            </div>
+
+            <div class="cap-row reveal">
+                <div class="cap-num">03.</div>
+                <div class="cap-title">Typographic Purity.</div>
+                <div class="cap-desc">Custom sub-pixel antialiasing algorithms. Perfected ligatures. Your code is no longer just text; it is rendered with the precision of a printed physical artifact.</div>
+            </div>
+        </section>
+
+        <!-- DOCUMENTATION -->
+        <section id="docs" class="section-block">
+            <h2 class="section-heading reveal">Documentation.</h2>
+            <div class="docs-grid reveal">
+                <div class="docs-content">
+                    <h3>Extensibility Protocol</h3>
+                    <p>Terminal v2.0 introduces a deterministic plugin architecture. Modules are written in Rust or TypeScript and compiled to WebAssembly for near-native execution speed within the sandbox.</p>
+                    <p>Unlike traditional terminal emulators, our API exposes the full AST of the command buffer, allowing you to manipulate rendering before the frame hits the GPU.</p>
+                </div>
+                <div class="code-block">
+                    <span class="comment">// terminal.config.ts</span><br>
+                    <span class="keyword">import</span> { defineConfig, Plugin } <span class="keyword">from</span> <span class="string">'@terminal/core'</span>;<br><br>
+                    <span class="keyword">export default</span> defineConfig({<br>
+                    &nbsp;&nbsp;performance: {<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;gpuAcceleration: <span class="keyword">true</span>,<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;frameRate: <span class="string">'uncapped'</span><br>
+                    &nbsp;&nbsp;},<br>
+                    &nbsp;&nbsp;plugins: [<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;Plugin.load(<span class="string">'@official/git-status'</span>),<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;Plugin.load(<span class="string">'@official/docker-metrics'</span>)<br>
+                    &nbsp;&nbsp;]<br>
+                    });
+                </div>
+            </div>
+        </section>
+
+        <!-- CHANGELOG -->
+        <section id="changelog" class="section-block">
+            <h2 class="section-heading reveal">Changelog.</h2>
+            <div class="changelog-list">
+                <div class="changelog-item reveal">
+                    <div class="changelog-version">v2.0.4 <span class="changelog-date">OCT 14, 2026</span></div>
+                    <ul class="changelog-notes">
+                        <li>Rewrote the font rendering engine to support variable font axes natively.</li>
+                        <li>Reduced baseline memory footprint by an additional 14%.</li>
+                        <li>Fixed a rare race condition during rapid pane splitting.</li>
+                    </ul>
+                </div>
+                <div class="changelog-item reveal">
+                    <div class="changelog-version">v2.0.0 <span class="changelog-date">SEP 01, 2026</span></div>
+                    <ul class="changelog-notes">
+                        <li>Initial release of the v2 architecture.</li>
+                        <li>Introduced WebAssembly sandboxing for all third-party plugins.</li>
+                        <li>Migrated entirely to GPU-accelerated rendering.</li>
+                        <li>Deprecated legacy `.rc` configuration in favor of TypeScript.</li>
+                    </ul>
+                </div>
+                <div class="changelog-item reveal">
+                    <div class="changelog-version">v1.9.8 <span class="changelog-date">JUL 12, 2026</span></div>
+                    <ul class="changelog-notes">
+                        <li>Final LTS release for the v1.x branch.</li>
+                        <li>Security patch for the SSH protocol handler.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- USEFUL INFO / FAQ -->
+        <section id="info" class="section-block">
+            <h2 class="section-heading reveal">Intelligence.</h2>
+            <div class="faq-grid">
+                <div class="faq-item reveal">
+                    <h3 class="faq-question">Is the core engine open source?</h3>
+                    <p class="faq-answer">The plugin API, renderer bridge, and standard library are fully open-source (MIT). The core GPU orchestrator remains proprietary to ensure uncompromised performance and security integrity.</p>
+                </div>
+                <div class="faq-item reveal">
+                    <h3 class="faq-question">Do you collect telemetry?</h3>
+                    <p class="faq-answer">Absolutely not. Terminal is an air-gapped instrument by default. We do not track usage, we do not monitor keystrokes, and we have zero network calls outbound unless explicitly invoked by a user-installed plugin.</p>
+                </div>
+                <div class="faq-item reveal">
+                    <h3 class="faq-question">What operating systems are supported?</h3>
+                    <p class="faq-answer">Currently calibrated for macOS (Apple Silicon only), Windows 11 (DirectX 12 required), and select Linux distributions running Wayland. We do not support legacy hardware.</p>
+                </div>
+            </div>
+        </section>
+
+        <footer>
+            <span>© 2026 Terminal Architecture</span>
+            <span>Made for the obsessive</span>
+        </footer>
+    </main>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            // Theme Toggle Logic
+            const themeToggle = document.getElementById('theme-toggle');
+            const html = document.documentElement;
+
+            const savedTheme = localStorage.getItem('theme');
+            const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+
+            if (savedTheme) {
+                html.setAttribute('data-theme', savedTheme);
+            } else if (prefersLight) {
+                html.setAttribute('data-theme', 'light');
+            }
+
+            themeToggle.addEventListener('click', () => {
+                const currentTheme = html.getAttribute('data-theme');
+                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                
+                html.setAttribute('data-theme', newTheme);
+                localStorage.setItem('theme', newTheme);
+            });
+
+            // Reveal Animation Logic
+            const observerOptions = {
+                root: null,
+                rootMargin: '0px',
+                threshold: 0.15
+            };
+
+            const observer = new IntersectionObserver((entries, observer) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('active');
+                        observer.unobserve(entry.target); 
+                    }
+                });
+            }, observerOptions);
+
+            document.querySelectorAll('.reveal').forEach(element => {
+                observer.observe(element);
+            });
+        });
+    </script>
+</body>
+</html>

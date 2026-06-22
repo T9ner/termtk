@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"termtalk/internal/client"
-	"termtalk/internal/db"
+	"nod/internal/client"
+	"nod/internal/db"
 )
 
 // newTestModel creates a Model backed by a real Client with a temp DB.

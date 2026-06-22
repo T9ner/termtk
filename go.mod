@@ -1,4 +1,4 @@
-module termtalk
+module nod
 
 go 1.26.1
 
@@ -14,6 +14,7 @@ require (
 	github.com/pion/stun/v3 v3.1.5
 	github.com/wailsapp/wails/v2 v2.12.0
 	golang.org/x/crypto v0.53.0
+	nhooyr.io/websocket v1.8.17
 )
 
 require (

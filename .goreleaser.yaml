@@ -1,9 +1,9 @@
-# GoReleaser Configuration for TermTalk
+# GoReleaser Configuration for Nod
 # For documentation, see https://goreleaser.com
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 
 version: 2
-project_name: termtalk
+project_name: nod
 
 release:
   prerelease: auto
@@ -13,9 +13,9 @@ before:
     - go mod tidy
 
 builds:
-  - id: termtalk
-    main: ./cmd/termtalk
-    binary: termtalk
+  - id: nod
+    main: ./cmd/nod
+    binary: nod
     goos:
       - darwin
       - windows
@@ -28,9 +28,9 @@ builds:
     ldflags:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
 
-  - id: termtalk-relay
-    main: ./cmd/termtalk-relay
-    binary: termtalk-relay
+  - id: nod-relay
+    main: ./cmd/nod-relay
+    binary: nod-relay
     goos:
       - darwin
       - windows
@@ -44,10 +44,10 @@ builds:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
 
 archives:
-  - id: termtalk-archive
+  - id: nod-archive
     ids:
-      - termtalk
-      - termtalk-relay
+      - nod
+      - nod-relay
     formats:
       - zip
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
@@ -57,13 +57,13 @@ archives:
 
 # Uncomment when T9ner/homebrew-tap repo is created on GitHub:
 # homebrew_casks:
-#   - name: termtalk
+#   - name: nod
 #     repository:
 #       owner: T9ner
 #       name: homebrew-tap
 #     commit_author:
 #       name: GoReleaser Bot
 #       email: bot@goreleaser.com
-#     homepage: "https://github.com/T9ner/termtk"
+#     homepage: "https://github.com/T9ner/nod"
 #     description: "Offline-first, decentralized terminal messenger"
 #     license: "MIT"

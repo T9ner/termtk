@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nod — Communication that never breaks</title>
+    <meta name="description" content="Offline-first, decentralized terminal messenger. Internet, LAN, or sneakernet — your messages always get through.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400&family=Manrope:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root[data-theme="dark"] {
+            --brand-light: #6EE8B3;
+            --brand-hover: #5AD9A0;
+            --brand-muted: #6b8274;
+            --bg-pure: #090D13;
+            --bg-elevated: #111519;
+            --bg-surface: #1A1E24;
+            --line-color: rgba(110, 232, 179, 0.08);
+            --text-main: #E8EAED;
+            --text-secondary: #8B9098;
+            --artifact-bg: #0a0e14;
+            --artifact-shadow: rgba(0,0,0,0.8);
+            --artifact-grid: rgba(255,255,255,0.02);
+            --spotlight-1: rgba(68, 222, 140, 0.08);
+            --spotlight-2: rgba(17, 100, 75, 0.03);
+            --noise-blend: overlay;
+            --noise-opacity: 0.10;
+            --noise-filter: none;
+            --tier-glow: rgba(110, 232, 179, 0.06);
+            --pulse-color: rgba(110, 232, 179, 0.4);
+        }
+
+        :root[data-theme="light"] {
+            --brand-light: #11644b;
+            --brand-hover: #0d5240;
+            --brand-muted: #6b8274;
+            --bg-pure: #fcfdfc;
+            --bg-elevated: #f3f6f4;
+            --bg-surface: #eaf0ec;
+            --line-color: rgba(2, 9, 7, 0.08);
+            --text-main: #010302;
+            --text-secondary: #505660;
+            --artifact-bg: #ffffff;
+            --artifact-shadow: rgba(0,0,0,0.05);
+            --artifact-grid: rgba(2, 9, 7, 0.03);
+            --spotlight-1: rgba(68, 222, 140, 0.12);
+            --spotlight-2: rgba(17, 100, 75, 0.05);
+            --noise-blend: multiply;
+            --noise-opacity: 0.35;
+            --noise-filter: invert(1);
+            --tier-glow: rgba(17, 100, 75, 0.04);
+            --pulse-color: rgba(17, 100, 75, 0.5);
+        }
+
+        :root { --ease-lux: cubic-bezier(0.16, 1, 0.3, 1); }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body, html {
+            width: 100%;
+            background-color: var(--bg-pure);
+            font-family: 'Manrope', sans-serif;
+            color: var(--text-main);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            overflow-x: hidden;
+            scroll-behavior: smooth;
+            transition: background-color 0.6s var(--ease-lux), color 0.6s var(--ease-lux);
+        }
+
+        /* --- TEXTURES & LIGHTING --- */
+
+        .noise {
+            position: fixed; inset: 0; z-index: 50;
+            opacity: var(--noise-opacity); pointer-events: none;
+            mix-blend-mode: var(--noise-blend); filter: var(--noise-filter);
+            transition: opacity 0.6s var(--ease-lux);
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+        }
+
+        .spotlight {
+            position: fixed; top: -25vh; left: 50%; transform: translateX(-50%);
+            width: 120vw; height: 80vh;
+            background: radial-gradient(ellipse at top center, var(--spotlight-1) 0%, var(--spotlight-2) 40%, rgba(1,3,2,0) 70%);
+            filter: blur(80px); z-index: 1; pointer-events: none;
+            transition: background 0.6s var(--ease-lux);
+        }
+
+        /* --- STRUCTURE --- */
+
+        .container { max-width: 1000px; margin: 0 auto; padding: 0 4vw; position: relative; z-index: 10; }
+
+        /* --- NAVIGATION --- */
+
+        header {
+            position: fixed; top: 0; left: 0; right: 0;
+            padding: 1.5rem 4vw;
+            display: flex; justify-content: space-between; align-items: center;
+            z-index: 100;
+        }
+
+        header::before {
+            content: ''; position: absolute; inset: 0;
+            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            mask-image: linear-gradient(to bottom, black 60%, transparent);
+            -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent);
+            z-index: -1;
+        }
+
+        .logo { display: flex; align-items: center; gap: 0.75rem; color: var(--brand-light); text-decoration: none; transition: color 0.6s var(--ease-lux); }
+        .logo-icon { width: 22px; height: 22px; transition: transform 0.4s var(--ease-lux); }
+        .logo:hover .logo-icon { transform: rotate(-12deg); }
+        .logo-text { font-size: 13px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; }
+
+        .nav-center { display: none; gap: 2rem; }
+        @media (min-width: 768px) { .nav-center { display: flex; } }
+
+        .nav-link { font-size: 11px; color: var(--brand-muted); text-decoration: none; transition: color 0.3s ease; }
+        .nav-link:hover { color: var(--text-main); }
+
+        .nav-actions { display: flex; align-items: center; gap: 2rem; }
+
+        .theme-toggle {
+            background: none; border: none; color: var(--brand-muted); cursor: pointer;
+            padding: 4px; display: flex; align-items: center; justify-content: center;
+            transition: color 0.3s ease;
+        }
+        .theme-toggle:hover { color: var(--brand-light); }
+        .theme-toggle svg { width: 16px; height: 16px; }
+
+        .action-link {
+            font-family: 'JetBrains Mono', monospace; font-size: 10px;
+            color: var(--brand-light); text-decoration: none;
+            letter-spacing: 0.1em; text-transform: uppercase;
+            position: relative; padding-bottom: 4px;
+            transition: color 0.6s var(--ease-lux);
+        }
+        .action-link::after {
+            content: ''; position: absolute; bottom: 0; left: 0;
+            width: 100%; height: 1px; background-color: var(--brand-light);
+            transform: scaleX(0); transform-origin: right;
+            transition: transform 0.6s var(--ease-lux), background-color 0.6s var(--ease-lux);
+        }
+        .action-link:hover::after { transform: scaleX(1); transform-origin: left; }
+
+        /* --- HERO --- */
+
+        .hero {
+            min-height: 100vh; display: flex; flex-direction: column;
+            justify-content: center; padding-top: 8vh;
+        }
+
+        .eyebrow {
+            font-family: 'JetBrains Mono', monospace; font-size: 11px;
+            color: var(--brand-muted); letter-spacing: 0.2em; text-transform: uppercase;
+            margin-bottom: 1.5rem; display: block;
+            transition: color 0.6s var(--ease-lux);
+        }
+
+        /* Returning visitor greeting */
+        .welcome-back {
+            display: none;
+            font-family: 'JetBrains Mono', monospace; font-size: 11px;
+            color: var(--brand-light); letter-spacing: 0.1em;
+            margin-bottom: 0.5rem; opacity: 0;
+            transition: opacity 0.8s var(--ease-lux);
+        }
+        .welcome-back.visible { display: block; opacity: 1; }
+
+        .hero h1 {
+            font-size: clamp(2.5rem, 5.5vw, 5.5rem); font-weight: 200;
+            line-height: 1.05; letter-spacing: -0.03em;
+            margin-bottom: 2rem; max-width: 18ch;
+        }
+        .hero h1 span { color: var(--brand-light); font-weight: 400; transition: color 0.6s var(--ease-lux); }
+
+        .hero p {
+            font-size: clamp(1rem, 1.5vw, 1.2rem); font-weight: 300;
+            color: var(--brand-muted); max-width: 480px; line-height: 1.65;
+            margin-bottom: 3rem; transition: color 0.6s var(--ease-lux);
+        }
+
+        .hero-actions { display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; }
+
+        .btn-primary {
+            display: inline-flex; align-items: center; gap: 0.75rem;
+            background: var(--brand-light); color: var(--bg-pure);
+            border: none; padding: 0.9rem 2rem;
+            font-family: 'Manrope', sans-serif; font-size: 13px; font-weight: 600;
+            letter-spacing: 0.04em; text-decoration: none;
+            border-radius: 100px; cursor: pointer;
+            transition: transform 0.2s ease, background-color 0.3s ease, color 0.6s var(--ease-lux);
+        }
+        .btn-primary:hover { transform: scale(1.03); background: var(--brand-hover); }
+
+        .btn-secondary {
+            display: inline-flex; align-items: center; gap: 0.75rem;
+            background: transparent; color: var(--text-main);
+            border: 1px solid var(--line-color); padding: 0.85rem 2rem;
+            font-family: 'Manrope', sans-serif; font-size: 13px; font-weight: 400;
+            letter-spacing: 0.04em; text-decoration: none;
+            border-radius: 100px; cursor: pointer;
+            transition: border-color 0.3s ease, background-color 0.3s ease, color 0.6s var(--ease-lux);
+        }
+        .btn-secondary:hover { border-color: var(--brand-light); background: var(--tier-glow); }
+
+        /* --- LIVE PULSE (social proof) --- */
+        .live-pulse {
+            display: flex; align-items: center; gap: 0.6rem;
+            margin-top: 2rem;
+            font-family: 'JetBrains Mono', monospace; font-size: 11px;
+            color: var(--brand-muted); letter-spacing: 0.05em;
+        }
+        .pulse-dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: var(--brand-light); position: relative;
+        }
+        .pulse-dot::after {
+            content: ''; position: absolute; inset: -3px;
+            border-radius: 50%; border: 1px solid var(--pulse-color);
+            animation: pulse-ring 2s ease-out infinite;
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(2.5); opacity: 0; }
+        }
+
+        /* --- SECTIONS --- */
+
+        .section-block { padding: 8vw 0; border-bottom: 1px solid var(--line-color); }
+        .section-block:last-of-type { border-bottom: none; }
+
+        .section-heading {
+            font-size: clamp(1.75rem, 3vw, 3rem); font-weight: 300;
+            letter-spacing: -0.02em; margin-bottom: 1.5rem;
+        }
+        .section-sub {
+            font-size: 1rem; color: var(--brand-muted); font-weight: 300;
+            max-width: 550px; line-height: 1.6; margin-bottom: 4rem;
+        }
+
+        /* --- THREE TIERS --- */
+
+        .tiers-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+
+        .tier-card {
+            background: var(--bg-elevated); border: 1px solid var(--line-color);
+            padding: 2.5rem 2rem; position: relative; overflow: hidden;
+            transition: background-color 0.4s ease, border-color 0.4s ease, transform 0.3s ease;
+        }
+        .tier-card:hover { background: var(--bg-surface); border-color: rgba(110, 232, 179, 0.15); transform: translateY(-2px); }
+
+        .tier-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+            background: linear-gradient(90deg, transparent, var(--brand-light), transparent);
+            opacity: 0; transition: opacity 0.4s ease;
+        }
+        .tier-card:hover::before { opacity: 0.6; }
+
+        .tier-num {
+            font-family: 'JetBrains Mono', monospace; font-size: 11px;
+            color: var(--brand-light); letter-spacing: 0.1em;
+            margin-bottom: 1.25rem; display: block;
+        }
+        .tier-icon { font-size: 2rem; margin-bottom: 1rem; display: block; line-height: 1; }
+        .tier-title { font-size: 1.25rem; font-weight: 500; margin-bottom: 0.75rem; }
+        .tier-desc { font-size: 0.95rem; color: var(--brand-muted); line-height: 1.6; font-weight: 300; }
+
+        /* --- ARTIFACT (CLI DEMO) --- */
+
+        .artifact-container {
+            width: 100%; background: var(--artifact-bg);
+            border: 1px solid var(--line-color); position: relative;
+            display: flex; flex-direction: column;
+            box-shadow: 0 30px 80px -20px var(--artifact-shadow), 0 0 40px rgba(110, 232, 179, 0.04);
+            transition: background-color 0.6s var(--ease-lux), border-color 0.6s var(--ease-lux), box-shadow 0.6s var(--ease-lux);
+        }
+
+        .artifact-container::after {
+            content: ''; position: absolute; inset: 0;
+            background-image:
+                linear-gradient(to right, var(--artifact-grid) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--artifact-grid) 1px, transparent 1px);
+            background-size: 3vw 3vw; pointer-events: none; z-index: 1;
+        }
+
+        .artifact-header {
+            height: 36px; border-bottom: 1px solid var(--line-color);
+            display: flex; align-items: center; padding: 0 1.25rem;
+            justify-content: space-between; position: relative; z-index: 2;
+        }
+        .artifact-dots { display: flex; gap: 6px; }
+        .artifact-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line-color); }
+        .artifact-dot:first-child { background: #FF6B6B; }
+        .artifact-dot:nth-child(2) { background: #FFD93D; }
+        .artifact-dot:nth-child(3) { background: #6EE8B3; }
+
+        .artifact-title {
+            font-family: 'JetBrains Mono', monospace; font-size: 10px;
+            color: var(--brand-muted); letter-spacing: 0.08em;
+        }
+
+        .artifact-body {
+            padding: 2rem 2.5rem; font-family: 'JetBrains Mono', monospace;
+            font-size: 13px; line-height: 2; color: var(--brand-muted);
+            position: relative; z-index: 2; overflow: hidden;
+        }
+
+        .line { display: flex; gap: 0.75rem; opacity: 0; animation: typeIn 0.4s var(--ease-lux) forwards; }
+        .line:nth-child(1) { animation-delay: 0.3s; }
+        .line:nth-child(2) { animation-delay: 0.7s; }
+        .line:nth-child(3) { animation-delay: 1.1s; }
+        .line:nth-child(4) { animation-delay: 1.5s; }
+        .line:nth-child(5) { animation-delay: 1.9s; }
+        .line:nth-child(7) { animation-delay: 2.5s; }
+        .line:nth-child(8) { animation-delay: 3.0s; }
+        .line:nth-child(9) { animation-delay: 3.4s; }
+        .line:nth-child(10) { animation-delay: 3.8s; }
+        @keyframes typeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+        .line .prompt { color: var(--brand-light); opacity: 0.8; }
+        .line .cmd { color: var(--text-main); }
+        .line .out { color: var(--brand-muted); padding-left: 1.5rem; }
+        .line .ok { color: var(--brand-light); }
+        .cursor { display: inline-block; width: 7px; height: 1.2em; background: var(--brand-light); vertical-align: middle; animation: blink 1s step-end infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
+        .artifact-spacer { height: 1.6em; }
+
+        /* --- CAPABILITIES --- */
+
+        .cap-row {
+            display: grid; grid-template-columns: 80px 1fr 1fr;
+            gap: 3rem; padding: 3rem 0; border-top: 1px solid var(--line-color);
+            transition: background-color 0.4s ease;
+        }
+        .cap-row:hover { background-color: var(--bg-elevated); }
+        .cap-num { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--brand-light); }
+        .cap-title { font-size: 1.4rem; font-weight: 400; letter-spacing: -0.02em; }
+        .cap-desc { font-size: 1rem; line-height: 1.6; color: var(--brand-muted); font-weight: 300; }
+
+        /* --- TRUST JOURNEY --- */
+
+        .journey-track {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 0;
+            position: relative;
+        }
+
+        .journey-track::before {
+            content: ''; position: absolute;
+            top: 28px; left: 5%; right: 5%; height: 1px;
+            background: linear-gradient(90deg, var(--brand-light), var(--line-color), var(--line-color));
+        }
+
+        .journey-step {
+            text-align: center; padding: 0 1.5rem;
+        }
+
+        .journey-marker {
+            width: 14px; height: 14px; border-radius: 50%;
+            border: 2px solid var(--brand-light);
+            background: var(--bg-pure);
+            margin: 0 auto 1.5rem;
+            position: relative; z-index: 2;
+            transition: background-color 0.3s ease, transform 0.3s ease;
+        }
+        .journey-step:first-child .journey-marker { background: var(--brand-light); }
+        .journey-step:hover .journey-marker { transform: scale(1.3); background: var(--brand-light); }
+
+        .journey-label {
+            font-family: 'JetBrains Mono', monospace; font-size: 11px;
+            color: var(--brand-light); letter-spacing: 0.08em;
+            margin-bottom: 0.75rem;
+        }
+        .journey-title { font-size: 1.15rem; font-weight: 500; margin-bottom: 0.5rem; }
+        .journey-desc { font-size: 0.9rem; color: var(--brand-muted); line-height: 1.5; font-weight: 300; }
+
+        /* --- INSTALL --- */
+
+        .install-grid { display: grid; grid-template-columns: 1fr 1.4fr; gap: 4rem; align-items: start; }
+
+        .install-content h3 { font-size: 1.4rem; font-weight: 400; margin-bottom: 1rem; }
+        .install-content p { color: var(--brand-muted); line-height: 1.6; font-weight: 300; margin-bottom: 2rem; }
+
+        .code-block {
+            background: var(--artifact-bg); border: 1px solid var(--line-color);
+            padding: 2rem; font-family: 'JetBrains Mono', monospace;
+            font-size: 12px; line-height: 1.8; color: var(--brand-muted);
+            overflow-x: auto; position: relative;
+            transition: background-color 0.6s var(--ease-lux), border-color 0.6s var(--ease-lux);
+        }
+        .code-block .comment { opacity: 0.5; }
+        .code-block .keyword { color: var(--brand-light); }
+        .code-block .string { color: var(--text-main); }
+
+        .platform-badges { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1.5rem; }
+        .badge {
+            font-family: 'JetBrains Mono', monospace; font-size: 10px;
+            padding: 0.4rem 0.8rem; border: 1px solid var(--line-color);
+            color: var(--brand-muted); letter-spacing: 0.05em;
+            transition: border-color 0.3s ease, color 0.3s ease;
+        }
+        .badge:hover { border-color: var(--brand-light); color: var(--text-main); }
+
+        /* --- ARCHITECTURE DIAGRAM --- */
+
+        .arch-diagram {
+            background: var(--artifact-bg); border: 1px solid var(--line-color);
+            padding: 3rem; font-family: 'JetBrains Mono', monospace;
+            font-size: 12px; line-height: 1.6; color: var(--brand-muted);
+            text-align: center; white-space: pre; overflow-x: auto;
+        }
+        .arch-diagram .node { color: var(--text-main); }
+        .arch-diagram .relay { color: var(--brand-light); }
+        .arch-diagram .protocol { color: var(--brand-muted); opacity: 0.7; }
+
+        /* --- FAQ --- */
+
+        .faq-grid { display: flex; flex-direction: column; }
+        .faq-item { padding: 2.5rem 0; border-top: 1px solid var(--line-color); cursor: pointer; }
+        .faq-question {
+            font-size: 1.2rem; font-weight: 400; color: var(--text-main); margin-bottom: 0;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .faq-toggle {
+            font-family: 'JetBrains Mono', monospace; font-size: 1.2rem;
+            color: var(--brand-muted); transition: transform 0.3s var(--ease-lux), color 0.3s ease;
+            flex-shrink: 0; margin-left: 1rem;
+        }
+        .faq-item.open .faq-toggle { transform: rotate(45deg); color: var(--brand-light); }
+        .faq-answer {
+            font-size: 1rem; line-height: 1.6; color: var(--brand-muted); font-weight: 300;
+            max-width: 700px; max-height: 0; overflow: hidden; opacity: 0;
+            transition: max-height 0.5s var(--ease-lux), opacity 0.4s ease, margin-top 0.3s ease;
+            margin-top: 0;
+        }
+        .faq-item.open .faq-answer { max-height: 300px; opacity: 1; margin-top: 1rem; }
+        .faq-answer code {
+            font-family: 'JetBrains Mono', monospace; font-size: 0.85em;
+            background: var(--bg-elevated); padding: 0.15em 0.4em;
+            border: 1px solid var(--line-color);
+        }
+
+        /* --- CTA BANNER --- */
+
+        .cta-banner {
+            text-align: center; padding: 6rem 2rem;
+        }
+        .cta-banner h2 {
+            font-size: clamp(2rem, 4vw, 3.5rem); font-weight: 200;
+            letter-spacing: -0.03em; margin-bottom: 1rem;
+        }
+        .cta-banner h2 span { color: var(--brand-light); font-weight: 400; }
+        .cta-banner p {
+            font-size: 1rem; color: var(--brand-muted); font-weight: 300;
+            margin-bottom: 2.5rem; max-width: 400px; margin-left: auto; margin-right: auto;
+            line-height: 1.6;
+        }
+
+        /* --- FOOTER --- */
+
+        footer {
+            padding: 3rem 0; display: flex; justify-content: space-between; align-items: center;
+            font-family: 'JetBrains Mono', monospace; font-size: 10px;
+            color: var(--brand-muted); text-transform: uppercase; letter-spacing: 0.1em;
+        }
+        footer a { color: var(--brand-muted); text-decoration: none; transition: color 0.3s ease; }
+        footer a:hover { color: var(--brand-light); }
+
+        /* --- ANIMATIONS --- */
+
+        .reveal { opacity: 0; transform: translateY(30px); transition: opacity 1.2s var(--ease-lux), transform 1.2s var(--ease-lux); }
+        .reveal.active { opacity: 1; transform: translateY(0); }
+
+        /* --- RESPONSIVE --- */
+
+        @media (max-width: 900px) {
+            .tiers-grid { grid-template-columns: 1fr; }
+            .cap-row { grid-template-columns: 1fr; gap: 1.25rem; padding: 2.5rem 0; }
+            .cap-num { margin-bottom: -0.75rem; }
+            .install-grid { grid-template-columns: 1fr; gap: 2rem; }
+            .arch-diagram { font-size: 10px; padding: 2rem 1rem; }
+            .journey-track { grid-template-columns: 1fr; gap: 2.5rem; }
+            .journey-track::before { display: none; }
+            .journey-step { text-align: left; padding: 0; }
+            .journey-marker { margin: 0 0 1rem 0; }
+        }
+
+        [data-theme="dark"] .icon-sun { display: block; }
+        [data-theme="dark"] .icon-moon { display: none; }
+        [data-theme="light"] .icon-sun { display: none; }
+        [data-theme="light"] .icon-moon { display: block; }
+    </style>
+</head>
+<body>
+    <div class="noise"></div>
+    <div class="spotlight"></div>
+
+    <header>
+        <a href="#" class="logo">
+            <svg class="logo-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="4" fill="currentColor"/>
+                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3"/>
+            </svg>
+            <span class="logo-text">Nod</span>
+        </a>
+        <nav class="nav-center">
+            <a href="#how" class="nav-link">How It Works</a>
+            <a href="#features" class="nav-link">Features</a>
+            <a href="#journey" class="nav-link">Your Journey</a>
+            <a href="#install" class="nav-link">Install</a>
+            <a href="#faq" class="nav-link">Intelligence</a>
+        </nav>
+        <div class="nav-actions">
+            <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+                <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
+            </button>
+            <a href="#install" class="action-link">Download v0.4</a>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- HERO -->
+        <section class="hero">
+            <div class="welcome-back" id="welcome-back"></div>
+            <span class="eyebrow reveal">Communication that never breaks</span>
+            <h1 class="reveal" style="transition-delay: 0.1s;">Messages find <span>a way.</span></h1>
+            <p class="reveal" style="transition-delay: 0.2s;">Nod is a decentralized terminal messenger that works over internet, local networks, or no network at all. One binary. Zero dependencies. Your data stays yours.</p>
+            <div class="hero-actions reveal" style="transition-delay: 0.3s;">
+                <a href="#install" class="btn-primary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Download Nod
+                </a>
+                <a href="https://github.com/T9ner/nod" class="btn-secondary" target="_blank">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+                    View Source
+                </a>
+            </div>
+            <div class="live-pulse reveal" style="transition-delay: 0.5s;">
+                <span class="pulse-dot"></span>
+                <span id="live-status">Open source · MIT Licensed · Built in Go</span>
+            </div>
+        </section>
+
+        <!-- THREE CONNECTIVITY TIERS -->
+        <section id="how" class="section-block">
+            <h2 class="section-heading reveal">Three ways through.</h2>
+            <p class="section-sub reveal">Most messengers need the internet. Nod works without it. Three connectivity tiers ensure your messages arrive — whatever the conditions.</p>
+
+            <div class="tiers-grid">
+                <div class="tier-card reveal">
+                    <span class="tier-num">TIER 01</span>
+                    <span class="tier-icon">◉</span>
+                    <h3 class="tier-title">Internet Relay</h3>
+                    <p class="tier-desc">Messages route through a lightweight cloud relay for global reach. Store-and-forward delivery, user search, live presence, and read receipts. Self-hostable.</p>
+                </div>
+                <div class="tier-card reveal" style="transition-delay: 0.1s;">
+                    <span class="tier-num">TIER 02</span>
+                    <span class="tier-icon">◎</span>
+                    <h3 class="tier-title">Campus LAN</h3>
+                    <p class="tier-desc">On the same network? Nod discovers peers via UDP broadcast and syncs directly over TCP. No internet required. Zero configuration. It just finds them.</p>
+                </div>
+                <div class="tier-card reveal" style="transition-delay: 0.2s;">
+                    <span class="tier-num">TIER 03</span>
+                    <span class="tier-icon">○</span>
+                    <h3 class="tier-title">Sneakernet</h3>
+                    <p class="tier-desc">No network at all? Export your messages to a file. Transfer by USB, email, carrier pigeon — whatever works. Import on the other end. Messages delivered.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- CLI DEMO (with typewriter animation) -->
+        <section class="section-block">
+            <div class="artifact-container reveal">
+                <div class="artifact-header">
+                    <div class="artifact-dots">
+                        <span class="artifact-dot"></span>
+                        <span class="artifact-dot"></span>
+                        <span class="artifact-dot"></span>
+                    </div>
+                    <span class="artifact-title">nod — v0.4.0</span>
+                </div>
+                <div class="artifact-body" id="cli-demo">
+                    <div class="line"><span class="prompt">❯</span> <span class="cmd">nod</span></div>
+                    <div class="line"><span class="out">Initializing local database... <span class="ok">OK</span></span></div>
+                    <div class="line"><span class="out">Starting UDP discovery on port 55557... <span class="ok">OK</span></span></div>
+                    <div class="line"><span class="out">Connecting to relay nod-relay.fly.dev:55558... <span class="ok">OK</span></span></div>
+                    <div class="line"><span class="out">Registered as <span class="cmd">@tunde</span> — 3 contacts, 2 online</span></div>
+                    <div class="artifact-spacer"></div>
+                    <div class="line"><span class="prompt">❯</span> <span class="cmd">chatting with chidi</span></div>
+                    <div class="line"><span class="out">chidi: hey, you around?</span></div>
+                    <div class="line"><span class="out"><span class="cmd">you:</span> building nod <span class="ok">[✓✓]</span></span></div>
+                    <div class="line"><span class="out"><span class="cmd">you:</span> it works offline now<span class="cursor"></span></span></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- FEATURES -->
+        <section id="features" class="section-block capabilities">
+            <h2 class="section-heading reveal">Built different.</h2>
+
+            <div class="cap-row reveal">
+                <div class="cap-num">01.</div>
+                <div class="cap-title">Offline-First Storage</div>
+                <div class="cap-desc">Every message lives in a local SQLite database. The app works fully without any network. When connectivity returns, sync happens automatically — nothing is ever lost.</div>
+            </div>
+            <div class="cap-row reveal">
+                <div class="cap-num">02.</div>
+                <div class="cap-title">Content-Addressed Messages</div>
+                <div class="cap-desc">Every message ID is a SHA-256 hash of its content. Duplicates are impossible. Integrity is guaranteed across all three sync methods — relay, LAN, and sneakernet.</div>
+            </div>
+            <div class="cap-row reveal">
+                <div class="cap-num">03.</div>
+                <div class="cap-title">End-to-End Encryption</div>
+                <div class="cap-desc">NaCl box encryption with X25519 key derivation. Your messages are encrypted before they leave your machine. The relay cannot read them. Nobody can.</div>
+            </div>
+            <div class="cap-row reveal">
+                <div class="cap-num">04.</div>
+                <div class="cap-title">Single Binary</div>
+                <div class="cap-desc">One CGO-free executable per platform. No runtime dependencies. No installers. No Docker. Download it, run it, and you're chatting. Pure Go, pure simplicity.</div>
+            </div>
+            <div class="cap-row reveal">
+                <div class="cap-num">05.</div>
+                <div class="cap-title">Self-Hostable Relay</div>
+                <div class="cap-desc">The relay server is the same single-binary story. Deploy it to Fly.io, your own VPS, or run it on your LAN. Point your clients at it. You own the infrastructure.</div>
+            </div>
+        </section>
+
+        <!-- YOUR JOURNEY WITH NOD (Trust Evolution) -->
+        <section id="journey" class="section-block">
+            <h2 class="section-heading reveal">Your journey with Nod.</h2>
+            <p class="section-sub reveal">Nod doesn't ask for trust upfront. It earns it. Here's how the relationship unfolds.</p>
+
+            <div class="journey-track reveal">
+                <div class="journey-step">
+                    <div class="journey-marker"></div>
+                    <div class="journey-label">DAY 1</div>
+                    <h3 class="journey-title">Download & run</h3>
+                    <p class="journey-desc">One binary, one command. Pick a username. You're chatting in under 30 seconds. No accounts, no email, no phone number. Just you and a terminal.</p>
+                </div>
+                <div class="journey-step">
+                    <div class="journey-marker"></div>
+                    <div class="journey-label">WEEK 1</div>
+                    <h3 class="journey-title">It just works</h3>
+                    <p class="journey-desc">You lose WiFi on the bus. Nod keeps working — messages queue in your outbox and sync automatically when you reconnect. Nothing is lost. You stop thinking about connectivity.</p>
+                </div>
+                <div class="journey-step">
+                    <div class="journey-marker"></div>
+                    <div class="journey-label">MONTH 1</div>
+                    <h3 class="journey-title">You own everything</h3>
+                    <p class="journey-desc">Your entire chat history lives on your machine. You export a sneakernet bundle for a friend with bad internet. You host your own relay. Nod works the way you want it to.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ARCHITECTURE -->
+        <section class="section-block">
+            <h2 class="section-heading reveal">The network.</h2>
+            <p class="section-sub reveal">Messages flow through whichever path is available. The relay is the fallback, not the requirement.</p>
+            <div class="arch-diagram reveal">
+<span class="node">┌──────────┐</span>          <span class="relay">┌─────────────────────┐</span>          <span class="node">┌──────────┐</span>
+<span class="node">│  Tunde   │</span><span class="protocol">◄── TCP ──</span><span class="relay">┤    Nod Relay (Fly)  ├</span><span class="protocol">── TCP ──►</span><span class="node">│  Chidi   │</span>
+<span class="node">│ (Lagos)  │</span>          <span class="relay">│  Search, Store &amp;    │</span>          <span class="node">│ (Campus) │</span>
+<span class="node">│          │</span>          <span class="relay">│  Forward, Presence  │</span>          <span class="node">│          │</span>
+<span class="node">└──────────┘</span>          <span class="relay">└─────────────────────┘</span>          <span class="node">└──────────┘</span>
+      <span class="protocol">▲                                                       ▲</span>
+      <span class="protocol">└──── UDP (auto-discover if same LAN) ──────────────────┘</span></div>
+        </section>
+
+        <!-- INSTALL -->
+        <section id="install" class="section-block">
+            <h2 class="section-heading reveal">Get started.</h2>
+            <div class="install-grid reveal">
+                <div class="install-content">
+                    <h3>No servers to set up. No UUIDs to exchange. Just run it.</h3>
+                    <p>Download the binary for your OS, run it, pick a username. You're connected. Find people with Ctrl+F, chat with Enter. That's the whole onboarding.</p>
+                    <div class="platform-badges">
+                        <span class="badge">Windows amd64</span>
+                        <span class="badge">macOS arm64</span>
+                        <span class="badge">macOS amd64</span>
+                        <span class="badge">Linux amd64</span>
+                        <span class="badge">Linux arm64</span>
+                    </div>
+                </div>
+                <div class="code-block">
+                    <span class="comment"># Download & run (macOS / Linux)</span><br>
+                    <span class="keyword">curl</span> -sL github.com/T9ner/nod/releases/latest -o nod<br>
+                    <span class="keyword">chmod</span> +x nod<br>
+                    <span class="keyword">./nod</span><br>
+                    <br>
+                    <span class="comment"># Or build from source</span><br>
+                    <span class="keyword">git clone</span> <span class="string">https://github.com/T9ner/nod.git</span><br>
+                    <span class="keyword">cd</span> nod<br>
+                    <span class="keyword">go build</span> -o nod ./cmd/nod<br>
+                    <span class="keyword">./nod</span><br>
+                    <br>
+                    <span class="comment"># Self-host the relay</span><br>
+                    <span class="keyword">go run</span> ./cmd/nod-relay --port 55558<br>
+                    <span class="keyword">./nod</span> --relay your-server.com:55558<br>
+                </div>
+            </div>
+        </section>
+
+        <!-- FAQ (interactive accordion) -->
+        <section id="faq" class="section-block">
+            <h2 class="section-heading reveal">Intelligence.</h2>
+            <div class="faq-grid">
+                <div class="faq-item reveal" onclick="this.classList.toggle('open')">
+                    <h3 class="faq-question">Can the relay read my messages? <span class="faq-toggle">+</span></h3>
+                    <p class="faq-answer">No. Messages are encrypted end-to-end with NaCl box (X25519 + XSalsa20 + Poly1305) before they leave your machine. The relay is a dumb pipe — it stores encrypted blobs and forwards them. It has no access to plaintext.</p>
+                </div>
+                <div class="faq-item reveal" onclick="this.classList.toggle('open')">
+                    <h3 class="faq-question">What happens when I go offline? <span class="faq-toggle">+</span></h3>
+                    <p class="faq-answer">Nothing breaks. Your messages are queued locally in an outbox. When connectivity returns — via internet, LAN, or sneakernet — Nod automatically drains the outbox and syncs everything. Messages are content-addressed, so duplicates are mathematically impossible.</p>
+                </div>
+                <div class="faq-item reveal" onclick="this.classList.toggle('open')">
+                    <h3 class="faq-question">How does LAN discovery work? <span class="faq-toggle">+</span></h3>
+                    <p class="faq-answer">Nod broadcasts UDP packets on port 55557. Any other Nod instance on the same local network will hear the broadcast, exchange peer info, and establish a direct TCP connection for real-time chat and message sync. No internet, no relay, no configuration.</p>
+                </div>
+                <div class="faq-item reveal" onclick="this.classList.toggle('open')">
+                    <h3 class="faq-question">What is sneakernet sync? <span class="faq-toggle">+</span></h3>
+                    <p class="faq-answer">Press <code>Ctrl+E</code> to export your messages as a JSON file. Transfer it physically — USB drive, email attachment, whatever. The recipient presses <code>Ctrl+I</code> to import. SHA-256 content addressing ensures integrity and prevents duplicates.</p>
+                </div>
+                <div class="faq-item reveal" onclick="this.classList.toggle('open')">
+                    <h3 class="faq-question">Is it really a single binary? <span class="faq-toggle">+</span></h3>
+                    <p class="faq-answer">Yes. Nod is written in pure Go with a CGO-free SQLite driver. It compiles to a single executable with zero runtime dependencies — no shared libraries, no Docker, no interpreters. Download it, run it. Works on Windows, macOS, and Linux.</p>
+                </div>
+                <div class="faq-item reveal" onclick="this.classList.toggle('open')">
+                    <h3 class="faq-question">What data does Nod collect? <span class="faq-toggle">+</span></h3>
+                    <p class="faq-answer">None. Zero telemetry, zero analytics, zero network calls except the ones you initiate. Your username, messages, and keys live exclusively in a local SQLite file on your machine. The relay sees only encrypted blobs and IP addresses. There is nothing to harvest.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- FINAL CTA -->
+        <section class="section-block cta-banner">
+            <h2 class="reveal">Start <span>nodding.</span></h2>
+            <p class="reveal" style="transition-delay: 0.1s;">One binary. Thirty seconds. You're in.</p>
+            <div class="reveal" style="transition-delay: 0.2s;">
+                <a href="#install" class="btn-primary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Download Nod
+                </a>
+            </div>
+        </section>
+
+        <footer>
+            <span>© 2026 Nod</span>
+            <a href="https://github.com/T9ner/nod" target="_blank">GitHub</a>
+            <span>Communication that never breaks</span>
+        </footer>
+    </main>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            // === THEME TOGGLE ===
+            const themeToggle = document.getElementById('theme-toggle');
+            const html = document.documentElement;
+            const savedTheme = localStorage.getItem('nod-theme');
+            const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+
+            if (savedTheme) html.setAttribute('data-theme', savedTheme);
+            else if (prefersLight) html.setAttribute('data-theme', 'light');
+
+            themeToggle.addEventListener('click', () => {
+                const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+                html.setAttribute('data-theme', next);
+                localStorage.setItem('nod-theme', next);
+            });
+
+            // === RETURNING VISITOR MEMORY (Pillar 1: Memory Revolution) ===
+            const welcomeEl = document.getElementById('welcome-back');
+            const visitKey = 'nod-visits';
+            const lastVisitKey = 'nod-last-visit';
+            const visits = parseInt(localStorage.getItem(visitKey) || '0') + 1;
+            const lastVisit = localStorage.getItem(lastVisitKey);
+            localStorage.setItem(visitKey, visits.toString());
+            localStorage.setItem(lastVisitKey, new Date().toISOString());
+
+            if (visits > 1 && welcomeEl) {
+                let msg = '';
+                if (visits === 2) {
+                    msg = '↩ Welcome back. You were here before.';
+                } else if (visits <= 5) {
+                    msg = `↩ Visit #${visits}. Still thinking about it?`;
+                } else {
+                    msg = `↩ Visit #${visits}. You keep coming back — maybe it's time.`;
+                }
+
+                if (lastVisit) {
+                    const hoursSince = Math.floor((Date.now() - new Date(lastVisit).getTime()) / 3600000);
+                    if (hoursSince < 1) msg = '↩ Back already? Good instinct.';
+                    else if (hoursSince < 24) msg = `↩ ${hoursSince}h since your last visit. Still curious?`;
+                }
+
+                welcomeEl.textContent = msg;
+                setTimeout(() => welcomeEl.classList.add('visible'), 300);
+            }
+
+            // === SCROLL REVEAL ===
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('active');
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, { root: null, rootMargin: '0px', threshold: 0.12 });
+
+            document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+            // === SCROLL DEPTH TRACKING (Pillar 5: Relationship Metrics) ===
+            let maxScroll = 0;
+            window.addEventListener('scroll', () => {
+                const scrollPct = Math.round((window.scrollY / (document.body.scrollHeight - window.innerHeight)) * 100);
+                if (scrollPct > maxScroll) {
+                    maxScroll = scrollPct;
+                    localStorage.setItem('nod-max-scroll', maxScroll.toString());
+                }
+            }, { passive: true });
+        });
+    </script>
+</body>
+</html>
