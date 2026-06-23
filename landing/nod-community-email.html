@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nod — Community Email</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            color: #1a1a1a;
+            background: #fff;
+            max-width: 640px;
+            margin: 2rem auto;
+            padding: 0 1.5rem;
+            font-size: 15px;
+            line-height: 1.65;
+            -webkit-font-smoothing: antialiased;
+        }
+        .email-header {
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .email-header table { width: 100%; border-collapse: collapse; }
+        .email-header td { padding: 3px 0; vertical-align: top; }
+        .email-header .label {
+            font-weight: 600;
+            color: #555;
+            width: 70px;
+            font-size: 13px;
+        }
+        .email-header .value { color: #1a1a1a; font-size: 14px; }
+        .subject { font-weight: 600; }
+        p { margin: 0 0 1em 0; }
+        a { color: #2d9d6a; }
+    </style>
+</head>
+<body>
+
+<div class="email-header">
+    <table>
+        <tr>
+            <td class="label">From:</td>
+            <td class="value">[Your Name] &lt;your.email@school.edu&gt;</td>
+        </tr>
+        <tr>
+            <td class="label">To:</td>
+            <td class="value">[School Community List]</td>
+        </tr>
+        <tr>
+            <td class="label">Subject:</td>
+            <td class="value subject">Nod — a messaging app that doesn't need stable internet</td>
+        </tr>
+    </table>
+</div>
+
+<p>Hey everyone,</p>
+
+<p>I've been building a messaging app called Nod and I think it's at the point where other people can try it. The idea is simple: your messages shouldn't fail just because campus Wi-Fi is being unreliable.</p>
+
+<p>Nod can deliver messages three ways. If you have internet, it routes through a relay server like any normal chat app. If you and the other person are on the same local network (same Wi-Fi, same dorm), it sends messages directly between your devices without going through the internet at all. And if you have no connection, messages sit in your outbox and deliver automatically the next time you're near that person. There's even a USB export option for truly zero-connectivity situations.</p>
+
+<p>All messages are end-to-end encrypted (NaCl box, X25519). I can't read them. The relay can't read them. Only the recipient can.</p>
+
+<p>It's open source (MIT license) and free. No sign-up, no phone number, no account creation. You pick a username and go.</p>
+
+<p>I'm sending this because I need real users. I've been testing mostly on my own and I know there are bugs I haven't found yet. If you try it and something breaks, that's useful to me. If you try it and something's confusing, that's also useful. I'd rather hear about problems now than after more people are using it.</p>
+
+<p>If you're interested:</p>
+
+<p>
+— Download it here: <a href="https://github.com/T9ner/Nod/releases/latest">github.com/T9ner/Nod/releases</a> (Windows for now, macOS/Linux coming)<br>
+— Report bugs or suggestions: <a href="https://github.com/T9ner/Nod/issues">github.com/T9ner/Nod/issues</a><br>
+— If you write code and want to contribute: <a href="https://github.com/T9ner/Nod">github.com/T9ner/Nod</a> (Go backend, React desktop frontend)<br>
+— Or just share it with someone you think would find it useful
+</p>
+
+<p>Thanks,<br>[Your Name]</p>
+
+</body>
+</html>

@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nod — Communication That Never Breaks</title>
+    <meta name="description" content="Nod is an offline-first, end-to-end encrypted messenger that works on internet, LAN, or completely offline. Download for Windows." />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400&family=Manrope:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root[data-theme="dark"] {
+            --brand: #4DCFA0;
+            --brand-muted: #6b8f7a;
+            --bg: #010302;
+            --bg-elevated: #060a07;
+            --line: rgba(77, 207, 160, 0.08);
+            --text: #e8f0eb;
+            --text-dim: #8aaf9a;
+            --artifact-bg: #000;
+            --artifact-shadow: rgba(0,0,0,0.8);
+            --artifact-grid: rgba(255,255,255,0.03);
+            --spotlight-1: rgba(68, 207, 140, 0.06);
+            --spotlight-2: rgba(17, 100, 75, 0.02);
+            --noise-blend: overlay;
+            --noise-opacity: 0.1;
+            --noise-filter: none;
+        }
+
+        :root[data-theme="light"] {
+            --brand: #0e5a43;
+            --brand-muted: #5a7a6c;
+            --bg: #fafcfb;
+            --bg-elevated: #f0f5f2;
+            --line: rgba(2, 9, 7, 0.07);
+            --text: #0a1610;
+            --text-dim: #5a7a6c;
+            --artifact-bg: #ffffff;
+            --artifact-shadow: rgba(0,0,0,0.06);
+            --artifact-grid: rgba(2, 9, 7, 0.025);
+            --spotlight-1: rgba(68, 207, 140, 0.08);
+            --spotlight-2: rgba(17, 100, 75, 0.03);
+            --noise-blend: multiply;
+            --noise-opacity: 0.06;
+            --noise-filter: invert(1);
+        }
+
+        :root {
+            --ease: cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body, html {
+            width: 100%;
+            background-color: var(--bg);
+            font-family: 'Manrope', sans-serif;
+            color: var(--text);
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            overflow-x: hidden;
+            scroll-behavior: smooth;
+            transition: background-color 0.6s var(--ease), color 0.6s var(--ease);
+        }
+
+        /* --- Accessibility --- */
+        .skip-link {
+            position: absolute;
+            top: -100%;
+            left: 16px;
+            background: var(--brand);
+            color: var(--bg);
+            padding: 8px 16px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            border-radius: 0 0 4px 4px;
+            z-index: 9999;
+            text-decoration: none;
+        }
+        .skip-link:focus { top: 0; }
+
+        *:focus-visible {
+            outline: 2px solid var(--brand);
+            outline-offset: 2px;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+            html { scroll-behavior: auto; }
+            .reveal { opacity: 1 !important; transform: none !important; }
+        }
+
+        /* --- Noise texture --- */
+        .noise {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            opacity: var(--noise-opacity);
+            pointer-events: none;
+            mix-blend-mode: var(--noise-blend);
+            filter: var(--noise-filter);
+            transition: opacity 0.6s var(--ease);
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+        }
+
+        /* --- Spotlight --- */
+        .spotlight {
+            position: fixed;
+            top: -20vh;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100vw;
+            height: 80vh;
+            background: radial-gradient(ellipse at top center, var(--spotlight-1) 0%, var(--spotlight-2) 40%, transparent 70%);
+            filter: blur(80px);
+            z-index: 1;
+            pointer-events: none;
+            transition: background 0.6s var(--ease);
+        }
+
+        /* --- Container --- */
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 0 4vw;
+            position: relative;
+            z-index: 10;
+        }
+
+        /* --- Header --- */
+        header {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            padding: 1.5rem 4vw;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            mask-image: linear-gradient(to bottom, black 60%, transparent);
+            -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent);
+            z-index: -1;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+        }
+
+        .logo-img {
+            width: 24px;
+            height: 24px;
+            border-radius: 5px;
+            outline: 1px solid rgba(255, 255, 255, 0.1);
+            outline-offset: -1px;
+        }
+
+        [data-theme="light"] .logo-img {
+            outline-color: rgba(0, 0, 0, 0.1);
+        }
+
+        .logo-text {
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--brand);
+            transition: color 0.6s var(--ease);
+        }
+
+        .nav-center {
+            display: none;
+            gap: 2rem;
+        }
+
+        @media (min-width: 768px) {
+            .nav-center { display: flex; }
+        }
+
+        .nav-link {
+            font-size: 11px;
+            color: var(--brand-muted);
+            text-decoration: none;
+            transition: color 0.3s ease;
+            padding: 12px 4px;
+        }
+
+        .nav-link:hover { color: var(--text); }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+
+        .theme-toggle {
+            background: none;
+            border: none;
+            color: var(--brand-muted);
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            min-width: 44px;
+            min-height: 44px;
+            justify-content: center;
+            position: relative;
+            transition: color 0.3s ease;
+        }
+
+        .theme-toggle:hover { color: var(--brand); }
+        .theme-toggle svg {
+            width: 16px;
+            height: 16px;
+            transition: opacity 0.3s cubic-bezier(0.2, 0, 0, 1), transform 0.3s cubic-bezier(0.2, 0, 0, 1), filter 0.3s cubic-bezier(0.2, 0, 0, 1);
+        }
+
+        .action-link {
+            font-family: 'Geist Mono', monospace;
+            font-size: 10px;
+            color: var(--brand);
+            text-decoration: none;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            position: relative;
+            padding-bottom: 4px;
+            transition: color 0.6s var(--ease);
+        }
+
+        .action-link::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 0;
+            width: 100%; height: 1px;
+            background-color: var(--brand);
+            transform: scaleX(0);
+            transform-origin: right;
+            transition: transform 0.6s var(--ease), background-color 0.6s var(--ease);
+        }
+
+        .action-link:hover::after {
+            transform: scaleX(1);
+            transform-origin: left;
+        }
+
+        /* --- Hero --- */
+        .hero {
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding-top: 8vh;
+        }
+
+        .eyebrow {
+            font-family: 'Geist Mono', monospace;
+            font-size: 11px;
+            color: var(--brand-muted);
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            margin-bottom: 1.5rem;
+            display: block;
+            transition: color 0.6s var(--ease);
+        }
+
+        .hero h1 {
+            font-size: clamp(2.5rem, 5vw, 5.5rem);
+            font-weight: 200;
+            line-height: 1.05;
+            letter-spacing: -0.03em;
+            margin-bottom: 2rem;
+            max-width: 16ch;
+            text-wrap: balance;
+        }
+
+        .hero h1 span {
+            color: var(--brand);
+            font-weight: 400;
+            transition: color 0.6s var(--ease);
+        }
+
+        .hero p {
+            font-size: clamp(1rem, 1.5vw, 1.2rem);
+            font-weight: 300;
+            color: var(--brand-muted);
+            max-width: 460px;
+            line-height: 1.6;
+            margin-bottom: 3rem;
+            text-wrap: pretty;
+            transition: color 0.6s var(--ease);
+        }
+
+        .btn-acquire {
+            display: inline-flex;
+            align-items: center;
+            gap: 1rem;
+            background: transparent;
+            color: var(--text);
+            border: 1px solid var(--line);
+            padding: 1rem 2rem;
+            font-size: 11px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            text-decoration: none;
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+            transition: border-color 0.4s var(--ease), color 0.4s var(--ease);
+        }
+
+        .btn-acquire::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: var(--text);
+            transform: translateY(100%);
+            transition: transform 0.6s var(--ease);
+            z-index: -1;
+        }
+
+        .btn-acquire:hover {
+            border-color: var(--text);
+            color: var(--bg);
+        }
+
+        .btn-acquire:active {
+            transform: scale(0.96);
+        }
+
+        .btn-acquire:hover::before { transform: translateY(0); }
+
+        /* --- Sections --- */
+        .section-block {
+            padding: 8vw 0;
+            border-bottom: none;
+            box-shadow: 0 1px 0 0 var(--line);
+            transition: box-shadow 0.6s var(--ease);
+        }
+
+        .section-block:last-of-type { box-shadow: none; }
+
+        .section-heading {
+            font-size: clamp(1.75rem, 3vw, 3rem);
+            font-weight: 300;
+            letter-spacing: -0.02em;
+            margin-bottom: 4rem;
+            text-wrap: balance;
+        }
+
+        /* --- Terminal artifact --- */
+        .artifact-container {
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: var(--artifact-bg);
+            border: 1px solid var(--line);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 30px 80px -20px var(--artifact-shadow);
+            transition: background-color 0.6s var(--ease), border-color 0.6s var(--ease);
+        }
+
+        .artifact-container::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(to right, var(--artifact-grid) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--artifact-grid) 1px, transparent 1px);
+            background-size: 3vw 3vw;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .artifact-header {
+            height: 32px;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            padding: 0 1.25rem;
+            justify-content: space-between;
+            position: relative;
+            z-index: 2;
+        }
+
+        .artifact-title {
+            font-family: 'Geist Mono', monospace;
+            font-size: 9px;
+            color: var(--brand-muted);
+            letter-spacing: 0.1em;
+            transition: color 0.6s var(--ease);
+        }
+
+        .artifact-body {
+            padding: 2.5rem;
+            font-family: 'Geist Mono', monospace;
+            font-size: 13px;
+            line-height: 1.8;
+            color: var(--brand-muted);
+            position: relative;
+            z-index: 2;
+            overflow: hidden;
+        }
+
+        .line { display: flex; gap: 0.75rem; }
+        .line .prompt { color: var(--brand); opacity: 0.8; }
+        .line .cmd { color: var(--text); }
+        .line .out { color: var(--brand-muted); padding-left: 1.5rem; }
+        .line .val { color: #78D1FF; }
+        .cursor { display: inline-block; width: 7px; height: 1.2em; background: var(--brand); vertical-align: middle; animation: blink 1s step-end infinite; }
+
+        @keyframes blink { 50% { opacity: 0; } }
+
+        /* --- Capabilities --- */
+        .cap-row {
+            display: grid;
+            grid-template-columns: 80px 1fr 1fr;
+            gap: 3rem;
+            padding: 3rem 0;
+            border-top: 1px solid var(--line);
+            transition: background-color 0.4s ease, border-color 0.6s var(--ease);
+        }
+
+        .cap-row:hover { background-color: var(--bg-elevated); }
+
+        .cap-num {
+            font-family: 'Geist Mono', monospace;
+            font-size: 12px;
+            color: var(--brand);
+            transition: color 0.6s var(--ease);
+        }
+
+        .cap-title {
+            font-size: 1.5rem;
+            font-weight: 400;
+            letter-spacing: -0.02em;
+        }
+
+        .cap-desc {
+            font-size: 1rem;
+            line-height: 1.6;
+            color: var(--brand-muted);
+            font-weight: 300;
+            text-wrap: pretty;
+            transition: color 0.6s var(--ease);
+        }
+
+        /* --- Changelog --- */
+        .changelog-list {
+            border-left: 1px solid var(--line);
+            padding-left: 3rem;
+            margin-left: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 4rem;
+            transition: border-color 0.6s var(--ease);
+        }
+
+        .changelog-item { position: relative; }
+
+        .changelog-item::before {
+            content: '';
+            position: absolute;
+            left: -3.3rem;
+            top: 0.4rem;
+            width: 9px;
+            height: 9px;
+            background: var(--brand);
+            border-radius: 50%;
+            box-shadow: 0 0 0 6px var(--bg);
+            transition: background-color 0.6s var(--ease), box-shadow 0.6s var(--ease);
+        }
+
+        .changelog-version {
+            font-family: 'Geist Mono', monospace;
+            font-size: 1.25rem;
+            color: var(--text);
+            margin-bottom: 0.25rem;
+            display: flex;
+            align-items: baseline;
+            gap: 1rem;
+            font-variant-numeric: tabular-nums;
+            transition: color 0.6s var(--ease);
+        }
+
+        .changelog-date {
+            font-size: 10px;
+            color: var(--brand-muted);
+            letter-spacing: 0.1em;
+        }
+
+        .changelog-notes {
+            margin-top: 1rem;
+            list-style: none;
+        }
+
+        .changelog-notes li {
+            color: var(--brand-muted);
+            font-size: 1rem;
+            line-height: 1.6;
+            margin-bottom: 0.5rem;
+            position: relative;
+            padding-left: 1.5rem;
+            font-weight: 300;
+        }
+
+        .changelog-notes li::before {
+            content: '-';
+            position: absolute;
+            left: 0;
+            color: var(--line);
+        }
+
+        /* --- FAQ --- */
+        .faq-grid {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .faq-item {
+            padding: 2.5rem 0;
+            border-top: 1px solid var(--line);
+            transition: border-color 0.6s var(--ease);
+        }
+
+        .faq-question {
+            font-size: 1.25rem;
+            font-weight: 400;
+            color: var(--text);
+            margin-bottom: 1rem;
+        }
+
+        .faq-answer {
+            font-size: 1rem;
+            line-height: 1.6;
+            color: var(--brand-muted);
+            font-weight: 300;
+            max-width: 700px;
+            text-wrap: pretty;
+        }
+
+        /* --- Footer --- */
+        footer {
+            padding: 3rem 0;
+            display: flex;
+            justify-content: space-between;
+            font-family: 'Geist Mono', monospace;
+            font-size: 10px;
+            color: var(--brand-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            transition: color 0.6s var(--ease);
+        }
+
+        /* --- Reveal --- */
+        .reveal {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 1.2s var(--ease), transform 1.2s var(--ease);
+        }
+
+        .reveal.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* --- Responsive --- */
+        @media (max-width: 900px) {
+            .cap-row { grid-template-columns: 1fr; gap: 1.25rem; padding: 2.5rem 0; }
+            .cap-num { margin-bottom: -0.75rem; }
+            .changelog-list { padding-left: 2rem; margin-left: 0.5rem; }
+            .changelog-item::before { left: -2.3rem; }
+        }
+
+        @media (max-width: 600px) {
+            .hero h1 { font-size: 2rem; }
+            .btn-acquire { width: 100%; justify-content: center; }
+            footer { flex-direction: column; gap: 0.5rem; }
+        }
+
+        /* --- Theme icons --- */
+        [data-theme="dark"] .icon-sun { opacity: 1; transform: scale(1); filter: blur(0); }
+        [data-theme="dark"] .icon-moon { opacity: 0; transform: scale(0.25); filter: blur(4px); position: absolute; }
+        [data-theme="light"] .icon-sun { opacity: 0; transform: scale(0.25); filter: blur(4px); position: absolute; }
+        [data-theme="light"] .icon-moon { opacity: 1; transform: scale(1); filter: blur(0); }
+
+        /* --- Selection --- */
+        ::selection {
+            background: rgba(77, 207, 160, 0.2);
+            color: var(--text);
+        }
+
+        [id] { scroll-margin-top: 72px; }
+    </style>
+</head>
+<body>
+    <a href="#main" class="skip-link">Skip to main content</a>
+    <div class="noise" aria-hidden="true"></div>
+    <div class="spotlight" aria-hidden="true"></div>
+
+    <header>
+        <a href="#" class="logo">
+            <img src="nod-logo.jpg" alt="Nod" class="logo-img" width="24" height="24" />
+            <span class="logo-text">Nod</span>
+        </a>
+        <nav class="nav-center">
+            <a href="#product" class="nav-link">Product</a>
+            <a href="#capabilities" class="nav-link">Capabilities</a>
+            <a href="#changelog" class="nav-link">Changelog</a>
+            <a href="#intel" class="nav-link">Intelligence</a>
+        </nav>
+        <div class="nav-actions">
+            <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+                <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
+            </button>
+            <a href="https://github.com/T9ner/Nod/releases/latest" class="action-link" rel="noopener">Download v0.6</a>
+        </div>
+    </header>
+
+    <main id="main" class="container">
+        <!-- HERO -->
+        <section class="hero">
+            <span class="eyebrow reveal">Offline-First · Encrypted · Decentralized</span>
+            <h1 class="reveal" style="transition-delay: 0.1s;">Communication that <span>never</span> breaks.</h1>
+            <p class="reveal" style="transition-delay: 0.2s;">An end-to-end encrypted messenger built for resilience. Works over internet, campus LAN, or completely offline. Your messages always find their way.</p>
+            <div class="reveal" style="transition-delay: 0.3s;">
+                <a href="https://github.com/T9ner/Nod/releases/latest" class="btn-acquire" rel="noopener">Initialize Download</a>
+            </div>
+        </section>
+
+        <!-- PRODUCT -->
+        <section id="product" class="section-block">
+            <div class="artifact-container reveal">
+                <div class="artifact-header">
+                    <span class="artifact-title">nod.status // v0.6.0</span>
+                    <span class="artifact-title" style="opacity: 0.5;">[ ENCRYPTED ]</span>
+                </div>
+                <div class="artifact-body">
+                    <div class="line"><span class="prompt">$</span> <span class="cmd">nod status</span></div>
+                    <div class="line out">────────────────────────────</div>
+                    <div class="line out">profile    <span class="val">operator_01</span></div>
+                    <div class="line out">encryption <span class="prompt">● NaCl box (X25519)</span></div>
+                    <div class="line out">relay      <span class="prompt">● connected</span>  fly.dev:55558</div>
+                    <div class="line out">lan        <span class="prompt">● 3 peers</span>   udp/55555</div>
+                    <div class="line out">outbox     <span class="prompt">● 0 queued</span></div>
+                    <div class="line out">────────────────────────────</div>
+                    <div class="line"><span class="prompt">$</span> <span class="cursor"></span></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- CAPABILITIES -->
+        <section id="capabilities" class="section-block">
+            <h2 class="section-heading reveal">Capabilities.</h2>
+
+            <div class="cap-row reveal">
+                <div class="cap-num">01.</div>
+                <div class="cap-title">E2E Encryption.</div>
+                <div class="cap-desc">NaCl box encryption with X25519 key exchange. Messages are encrypted before they leave your device. No server — not even ours — ever sees your plaintext.</div>
+            </div>
+
+            <div class="cap-row reveal">
+                <div class="cap-num">02.</div>
+                <div class="cap-title">Three Connectivity Tiers.</div>
+                <div class="cap-desc">Internet relay for global reach. UDP discovery + TCP sync for campus LAN. Sneakernet JSON export for zero connectivity. Messages always find a path.</div>
+            </div>
+
+            <div class="cap-row reveal">
+                <div class="cap-num">03.</div>
+                <div class="cap-title">Local-First Storage.</div>
+                <div class="cap-desc">SQLite database on your device with content-addressed message IDs (SHA-256). Your data never leaves your machine unless you explicitly send it.</div>
+            </div>
+
+            <div class="cap-row reveal">
+                <div class="cap-num">04.</div>
+                <div class="cap-title">Native Desktop.</div>
+                <div class="cap-desc">Wails v2 with WebView2. A single .exe with no dependencies. Runs on Windows with a native feel — not a browser pretending to be an application.</div>
+            </div>
+        </section>
+
+        <!-- CHANGELOG -->
+        <section id="changelog" class="section-block">
+            <h2 class="section-heading reveal">Changelog.</h2>
+            <div class="changelog-list">
+                <div class="changelog-item reveal">
+                    <div class="changelog-version">v0.6.0 <span class="changelog-date">JUN 22, 2026</span></div>
+                    <ul class="changelog-notes">
+                        <li>Native desktop app with premium entrance screen.</li>
+                        <li>Full feature parity with web UI, light mode default.</li>
+                    </ul>
+                </div>
+                <div class="changelog-item reveal">
+                    <div class="changelog-version">v0.5.0 <span class="changelog-date">JUN 20, 2026</span></div>
+                    <ul class="changelog-notes">
+                        <li>E2E encryption with NaCl box (X25519 key exchange).</li>
+                        <li>Web UI with WebSocket sync, emoji reactions, file uploads.</li>
+                    </ul>
+                </div>
+                <div class="changelog-item reveal">
+                    <div class="changelog-version">v0.4.0 <span class="changelog-date">JUN 18, 2026</span></div>
+                    <ul class="changelog-notes">
+                        <li>Relay server deployed on Fly.io with store-and-forward.</li>
+                        <li>Contact management and user directory.</li>
+                    </ul>
+                </div>
+                <div class="changelog-item reveal">
+                    <div class="changelog-version">v0.3.0 <span class="changelog-date">JUN 17, 2026</span></div>
+                    <ul class="changelog-notes">
+                        <li>TCP sync for direct peer-to-peer messaging.</li>
+                        <li>Sneakernet export/import with SHA-256 integrity.</li>
+                    </ul>
+                </div>
+                <div class="changelog-item reveal">
+                    <div class="changelog-version">v0.2.0 <span class="changelog-date">JUN 16, 2026</span></div>
+                    <ul class="changelog-notes">
+                        <li>UDP broadcast peer discovery on LAN.</li>
+                        <li>Bubble Tea TUI with SQLite persistence.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- INTELLIGENCE -->
+        <section id="intel" class="section-block">
+            <h2 class="section-heading reveal">Intelligence.</h2>
+            <div class="faq-grid">
+                <div class="faq-item reveal">
+                    <h3 class="faq-question">Is Nod open source?</h3>
+                    <p class="faq-answer">Entirely. The full stack — client, relay server, CLI, and desktop app — is MIT-licensed and available on GitHub. We believe communication tools should be auditable.</p>
+                </div>
+                <div class="faq-item reveal">
+                    <h3 class="faq-question">Do you collect telemetry?</h3>
+                    <p class="faq-answer">No. Nod is offline-first by design. There are zero network calls unless you explicitly connect to the relay or discover peers on your LAN. No tracking, no analytics, no cloud dependency.</p>
+                </div>
+                <div class="faq-item reveal">
+                    <h3 class="faq-question">What happens when there's no internet?</h3>
+                    <p class="faq-answer">Messages queue locally in your outbox and are delivered automatically when connectivity resumes — via relay, LAN sync, or sneakernet file transfer. Nothing is ever lost.</p>
+                </div>
+                <div class="faq-item reveal">
+                    <h3 class="faq-question">What platforms are supported?</h3>
+                    <p class="faq-answer">Windows desktop (native .exe via Wails v2), a localhost web UI accessible from any browser, and a terminal TUI built with Bubble Tea. macOS and Linux builds are planned.</p>
+                </div>
+            </div>
+        </section>
+
+        <footer>
+            <span>© 2026 Nod Contributors · MIT License</span>
+            <span>Built for the obsessive</span>
+        </footer>
+    </main>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            // Theme toggle
+            const toggle = document.getElementById('theme-toggle');
+            const html = document.documentElement;
+            const saved = localStorage.getItem('nod-theme');
+            if (saved) html.setAttribute('data-theme', saved);
+
+            toggle.addEventListener('click', () => {
+                const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+                html.setAttribute('data-theme', next);
+                localStorage.setItem('nod-theme', next);
+            });
+
+            // Reveal on scroll
+            const observer = new IntersectionObserver((entries, obs) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('active');
+                        obs.unobserve(entry.target);
+                    }
+                });
+            }, { threshold: 0.15 });
+
+            document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+        });
+    </script>
+</body>
+</html>
